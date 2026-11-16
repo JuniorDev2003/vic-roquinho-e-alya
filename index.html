@@ -1,0 +1,1368 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0d1a12">
+<title>Vic, Roquinho e Alya</title>
+<style>
+  html, body {
+    margin: 0; height: 100%; background: #0d1a12; overflow: hidden;
+    /* sem zoom, rolagem, seleção de texto ou menu ao segurar o dedo */
+    touch-action: none; overscroll-behavior: none;
+    -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+  }
+  body { display: flex; align-items: center; justify-content: center; }
+  #tela { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
+  #topo {
+    position: fixed; z-index: 4; display: flex; gap: 8px;
+    top: calc(12px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right));
+  }
+  #topo button {
+    font: bold 15px "Courier New", monospace; color: #fff;
+    background: rgba(0, 0, 0, 0.45); border: 2px solid #ffffff88; border-radius: 8px;
+    padding: 6px 10px; cursor: pointer;
+  }
+  #topo button:hover { background: rgba(0, 0, 0, 0.65); }
+  #tela-cheia { display: none; }
+
+  /* ---------- controles de toque (só aparecem em celular/tablet) ---------- */
+  #controles { display: none; }
+  body.toque #controles { display: block; }
+  body.toque.pode-tela-cheia #tela-cheia { display: inline-block; }
+  .ctl {
+    position: fixed; z-index: 3; display: flex; gap: 10px;
+    bottom: calc(14px + env(safe-area-inset-bottom));
+  }
+  #dpad { left: calc(14px + env(safe-area-inset-left)); padding: 6px; margin: -6px; }
+  #area-pulo { right: calc(14px + env(safe-area-inset-right)); }
+  .bt {
+    width: 66px; height: 66px; border-radius: 50%; box-sizing: border-box;
+    display: flex; align-items: center; justify-content: center;
+    font: bold 26px "Courier New", monospace; color: #fff;
+    background: rgba(0, 0, 0, 0.35); border: 2px solid #ffffff99;
+    pointer-events: none; /* o toque é tratado pelo container */
+  }
+  #bt-pular { width: 84px; height: 84px; font-size: 30px; pointer-events: auto; }
+  #dpad[data-ativo~="esquerda"] .esq,
+  #dpad[data-ativo~="direita"] .dir,
+  #bt-pular.ativo { background: rgba(255, 255, 255, 0.4); }
+  #girar {
+    display: none; position: fixed; z-index: 2; left: 0; right: 0;
+    top: calc(64px + env(safe-area-inset-top)); text-align: center;
+    font: bold 14px "Courier New", monospace; color: #bff5c9; opacity: 0.85;
+  }
+  @media (orientation: portrait) {
+    body.toque #girar { display: block; }
+    body.toque .ctl { bottom: calc(40px + env(safe-area-inset-bottom)); }
+  }
+</style>
+</head>
+<body>
+<canvas id="tela" width="320" height="192"></canvas>
+<div id="topo">
+  <button id="tela-cheia" type="button">⛶</button>
+  <button id="som" type="button">🔊 Som</button>
+</div>
+<div id="girar">↻ Vire o celular para jogar maior</div>
+<div id="controles">
+  <div id="dpad" class="ctl"><div class="bt esq">◀</div><div class="bt dir">▶</div></div>
+  <div id="area-pulo" class="ctl"><div id="bt-pular" class="bt">▲</div></div>
+</div>
+<script>
+// ==== sprites.js ====
+(function (J) {
+  // Sprites em pixel art. '.' = transparente. Todos olham para a DIREITA.
+
+  // ---------- Vic ----------
+  const VIC_PALETA = {
+    K: '#2b1d14', // contorno
+    R: '#5a3b26', // raiz escura do cabelo
+    Y: '#f2d36b', // loiro
+    S: '#f1c6a0', // pele
+    E: '#2b1d14', // olho
+    P: '#e08a8a', // bochecha/boca
+    T: '#ef7b6c', // blusa coral
+    D: '#3d5a8a', // short jeans
+    B: '#6b4428', // botinhas
+  };
+  const VIC_TRONCO = [
+    '....KKKK....',
+    '..KKRRRRK...',
+    '.KRRRRRRRK..',
+    '.KYRRRRYYK..',
+    'KYYYYSSSSK..',
+    'KYYYSSSESK..',
+    'KYYYSSSSSK..',
+    'KYYYSSPSK...',
+    'KYYYYKSSK...',
+    'KYYYKTTTK...',
+    'KYYKTTTTTK..',
+    '.KYKTTTTSK..',
+    '..KKTTTTSK..',
+    '...KTTTTK...',
+  ];
+  const vic = (pernas) => ({ linhas: VIC_TRONCO.concat(pernas), paleta: VIC_PALETA });
+
+  const VIC_PARADO = [
+    '...KDDDDK...',
+    '...KDDKDDK..',
+    '...KSK.KSK..',
+    '...KSK.KSK..',
+    '..KBBK.KBBK.',
+    '..KKKK.KKKK.',
+  ];
+  const VIC_PASSO = [
+    '...KDDDDK...',
+    '..KDDKKDDK..',
+    '..KSK..KSK..',
+    '.KSK....KSK.',
+    'KBBK....KBBK',
+    'KKKK....KKKK',
+  ];
+  const VIC_JUNTA = [
+    '...KDDDDK...',
+    '...KDDDDK...',
+    '....KSSK....',
+    '....KSSK....',
+    '...KBBBBK...',
+    '...KKKKKK...',
+  ];
+  const VIC_PULO = [
+    '...KDDDDK...',
+    '...KDDDDDK..',
+    '...KSKKSK...',
+    '..KBBKBBK...',
+    '..KKKKKKK...',
+    '............',
+  ];
+
+  // ---------- Gatos ----------
+  const GATO_PERNAS = {
+    parado: ['..KCK.KCK.KCK.', '..KK..KK..KK..'],
+    passo: ['.KCK..KCK.KCK.', '.KK...KK...KK.'],
+    junta: ['...KCKKCK..KCK', '...KK.KK...KK.'],
+  };
+  const gato = (corpo, pernas, cor, paleta) => ({
+    linhas: corpo.concat(GATO_PERNAS[pernas].map((l) => l.replace(/C/g, cor))),
+    paleta,
+  });
+
+  const ROQ_CORPO = [
+    '.........KK.KK',
+    'K........KBKBK',
+    'BK.......KBBBK',
+    '.BK.....KBGBGK',
+    '.BKKKKKKKBBBPK',
+    '..KBHHHBBBBBK.',
+    '..KBBBBBBBBK..',
+  ];
+  const ROQ_PALETA = { K: '#0b0b0f', B: '#26262e', H: '#44444f', G: '#d7e64a', P: '#e98aa0' };
+
+  const ALYA_CORPO = [
+    '.........KK.KK',
+    'K........KOKWK',
+    'OK.......KOOWK',
+    '.OK.....KWGWGK',
+    '.WKKKKKKKWWWPK',
+    '..KWOOOWWWWWK.',
+    '..KWOOWWWWWK..',
+  ];
+  const ALYA_PALETA = { K: '#3a2a1a', W: '#fbf8ef', O: '#f0b44a', G: '#2f6a3a', P: '#e98aa0' };
+
+  // ---------- Onça (20x12) ----------
+  const ONCA_PALETA = {
+    K: '#3a2614', // contorno
+    P: '#e0a43a', // pelo
+    M: '#5a3b1a', // pintas
+    C: '#f6e3b0', // barriga e focinho
+    E: '#2b1d14', // olho
+    N: '#8a4a3a', // nariz
+    W: '#ffffff', // branco do olho (assustada)
+  };
+  const ONCA_CORPO = [
+    '.PK.KKKKKKKKKPPEPPEK',
+    '.PKKPPMPPMPPKPPPCCNK',
+    '..KPMPPPMPPMPKPCCCK.',
+    '..KPPPMPPPPPPPKKKK..',
+    '..KPMPPPMPPMPPPK....',
+    '..KCCCCCCCCCCCCK....',
+  ];
+  const ONCA_CABECA = [
+    '..............K..K..',
+    '.............KPK.KPK',
+    'K............KPPKPPK',
+    'PK..........KPPPPPPK',
+  ];
+  const ONCA_CABECA_ASSUSTADA = [
+    '....................',
+    '..............KK.KK.',
+    'K............KPPKPPK',
+    'PK..........KPWWPWWK',
+  ];
+  const ONCA_PERNAS = {
+    a: ['..KPK.KPK..KPK.KPK..', '..KK..KK...KK..KK...'],
+    b: ['.KPK..KPK.KPK..KPK..', '.KK...KK..KK...KK...'],
+  };
+  const onca = (cabeca, pernas, assustada) => {
+    const corpo = ONCA_CORPO.slice();
+    if (assustada) corpo[0] = '.PK.KKKKKKKKKPWEPWEK';
+    return { linhas: cabeca.concat(corpo, ONCA_PERNAS[pernas]), paleta: ONCA_PALETA };
+  };
+
+  // ---------- Itens ----------
+  const ACAI = {
+    linhas: ['..G...', '..GG..', '.AAA..', 'AALAA.', 'AAAAA.', '.AAA..'],
+    paleta: { G: '#2f7a4a', A: '#5b2a6e', L: '#c79ad6' },
+  };
+  const FRUTA = {
+    linhas: ['...G..', '..GG..', '.OOOO.', 'OOLOOO', 'OOOOOO', '.OOOO.'],
+    paleta: { G: '#2f7a4a', O: '#f08a2e', L: '#ffd08a' },
+  };
+  const MASTRO = '.P......';
+  const BANDEIRA_PALETA = { P: '#d9d2c3', T: '#f2d36b', F: '#3fa65a', Y: '#f2d36b', G: '#8a8a8a', K: '#3a2614' };
+  const BANDEIRA_ERGUIDA = {
+    linhas: ['TT......', '.PFFFFF.', '.PFFYFF.', '.PFFFF..', '.PFFF...']
+      .concat(Array(10).fill(MASTRO), ['KPK.....']),
+    paleta: BANDEIRA_PALETA,
+  };
+  const BANDEIRA_ABAIXADA = {
+    linhas: ['TT......'].concat(Array(10).fill(MASTRO),
+      ['.PGGG...', '.PGGGG..', '.PGGGG..', '.PGG....', 'KPK.....']),
+    paleta: BANDEIRA_PALETA,
+  };
+  const CORACAO = ['.CC.CC.', 'CLCCCCC', 'CCCCCCC', '.CCCCC.', '..CCC..', '...C...'];
+
+  J.sprites = {
+    vic: {
+      parado: vic(VIC_PARADO),
+      andando: [vic(VIC_PASSO), vic(VIC_JUNTA)],
+      pulando: vic(VIC_PULO),
+    },
+    roquinho: {
+      parado: gato(ROQ_CORPO, 'parado', 'B', ROQ_PALETA),
+      andando: [gato(ROQ_CORPO, 'passo', 'B', ROQ_PALETA), gato(ROQ_CORPO, 'junta', 'B', ROQ_PALETA)],
+    },
+    alya: {
+      parado: gato(ALYA_CORPO, 'parado', 'W', ALYA_PALETA),
+      andando: [gato(ALYA_CORPO, 'passo', 'W', ALYA_PALETA), gato(ALYA_CORPO, 'junta', 'W', ALYA_PALETA)],
+    },
+    onca: {
+      andando: [onca(ONCA_CABECA, 'a', false), onca(ONCA_CABECA, 'b', false)],
+      fugindo: onca(ONCA_CABECA_ASSUSTADA, 'b', true),
+    },
+    acai: ACAI,
+    fruta: FRUTA,
+    bandeira: { abaixada: BANDEIRA_ABAIXADA, erguida: BANDEIRA_ERGUIDA },
+    coracao: {
+      cheio: { linhas: CORACAO, paleta: { C: '#e05a6a', L: '#ffb3bd' } },
+      vazio: { linhas: CORACAO, paleta: { C: '#5a3b3b', L: '#6e4a4a' } },
+    },
+  };
+
+  J.desenharSprite = function (ctx, sprite, x, y, { espelhar = false, escala = 1 } = {}) {
+    const ox = Math.round(x);
+    const oy = Math.round(y);
+    const largura = sprite.linhas[0].length;
+    sprite.linhas.forEach((linha, lin) => {
+      for (let col = 0; col < linha.length; col++) {
+        const ch = linha[col];
+        if (ch === '.') continue;
+        const c = espelhar ? largura - 1 - col : col;
+        ctx.fillStyle = sprite.paleta[ch];
+        ctx.fillRect(ox + c * escala, oy + lin * escala, escala, escala);
+      }
+    });
+  };
+})(globalThis.Jogo = globalThis.Jogo || {});
+
+// ==== fisica.js ====
+(function (J) {
+  J.TILE = 16;
+  J.GRAVIDADE = 900;      // px/s²
+  J.VEL_ANDAR = 90;       // px/s
+  J.VEL_PULO = 300;       // px/s
+  J.VEL_QUEDA_MAX = 400;  // px/s
+  J.DT_MAX = 1 / 30;      // s
+
+  const EPS = 1e-6;
+  const tileDe = (px) => Math.floor(px / J.TILE);
+
+  J.colide = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+
+  J.alturaMaxPulo = () => (J.VEL_PULO * J.VEL_PULO) / (2 * J.GRAVIDADE);
+
+  function colunaTemSolido(fase, col, y, h) {
+    for (let lin = tileDe(y); lin <= tileDe(y + h - EPS); lin++) if (fase.solido(col, lin)) return true;
+    return false;
+  }
+  function linhaTemSolido(fase, lin, x, w) {
+    for (let col = tileDe(x); col <= tileDe(x + w - EPS); col++) if (fase.solido(col, lin)) return true;
+    return false;
+  }
+
+  J.moverCorpo = function (corpo, fase, dt) {
+    const T = J.TILE;
+    corpo.vy = Math.min(corpo.vy + J.GRAVIDADE * dt, J.VEL_QUEDA_MAX);
+    const passos = Math.max(1, Math.ceil(Math.max(Math.abs(corpo.vx * dt), Math.abs(corpo.vy * dt)) / (T / 2)));
+    const sub = dt / passos;
+    let noChao = false;
+    let bateuParede = false;
+
+    for (let i = 0; i < passos; i++) {
+      // eixo X
+      if (corpo.vx !== 0) {
+        corpo.x += corpo.vx * sub;
+        if (corpo.vx > 0) {
+          const col = tileDe(corpo.x + corpo.w - EPS);
+          if (colunaTemSolido(fase, col, corpo.y, corpo.h)) { corpo.x = col * T - corpo.w; bateuParede = true; }
+        } else {
+          const col = tileDe(corpo.x);
+          if (colunaTemSolido(fase, col, corpo.y, corpo.h)) { corpo.x = (col + 1) * T; bateuParede = true; }
+        }
+      }
+      // eixo Y
+      if (corpo.vy !== 0) {
+        corpo.y += corpo.vy * sub;
+        if (corpo.vy > 0) {
+          const lin = tileDe(corpo.y + corpo.h - EPS);
+          if (linhaTemSolido(fase, lin, corpo.x, corpo.w)) { corpo.y = lin * T - corpo.h; corpo.vy = 0; noChao = true; }
+        } else {
+          const lin = tileDe(corpo.y);
+          if (linhaTemSolido(fase, lin, corpo.x, corpo.w)) { corpo.y = (lin + 1) * T; corpo.vy = 0; }
+        }
+      }
+    }
+    return { noChao, bateuParede };
+  };
+})(globalThis.Jogo = globalThis.Jogo || {});
+
+// ==== fase.js ====
+(function (J) {
+  // Legenda: . ar  # chão  = galho  T tronco  ~ água  a açaí  f fruta
+  //          o onça  O onça chefona  B bandeirinha  S início  E estufa
+  const LINHAS = 12;
+  const SOLIDOS = '#=T';
+
+  function construirMapa() {
+    const grade = Array.from({ length: LINHAS }, () => Array(1200).fill('.'));
+    let c = 0;
+    const secoes = [];
+    const por = (col, lin, ch) => { grade[lin][col] = ch; };
+    const chao = (col, topo = 10) => { for (let l = topo; l < LINHAS; l++) por(col, l, '#'); };
+
+    const P = {
+      plano(n, { item = 'a', cada = 3, topo = 10 } = {}) {
+        for (let i = 0; i < n; i++) {
+          chao(c + i, topo);
+          if (item && i % cada === 1) por(c + i, topo - 1, item);
+        }
+        c += n;
+      },
+      tronco(alt = 1) {
+        P.plano(2, { item: null });
+        chao(c);
+        for (let k = 1; k <= alt; k++) por(c, 10 - k, 'T');
+        por(c - 1, 9 - alt - 1, 'a'); por(c, 9 - alt - 2, 'a'); por(c + 1, 9 - alt - 1, 'a');
+        c += 1;
+        P.plano(3, { item: null });
+      },
+      degraus() {
+        P.plano(3, { topo: 9, cada: 2 });
+        P.plano(3, { item: 'f', topo: 8, cada: 2 });
+        P.plano(3, { topo: 9, cada: 2 });
+      },
+      buraco(w = 3) {
+        P.plano(2, { item: null });
+        for (let i = 0; i < w; i++) por(c + i, 7, 'a');
+        c += w;
+        P.plano(2, { item: null });
+      },
+      galho() {
+        P.plano(2, { item: null });
+        P.plano(2, { item: null, topo: 9 }); // degrauzinho para alcançar o galho
+        P.plano(2, { item: null });          // espaço para não bater a cabeça no galho
+        const ini = c;
+        P.plano(6, { item: null });
+        for (let i = 0; i < 4; i++) { por(ini + i, 7, '='); por(ini + i, 6, i % 2 ? 'f' : 'a'); }
+      },
+      onca() {
+        P.plano(12, { cada: 4 });
+        por(c - 6, 9, 'o');
+      },
+      bandeira() {
+        P.plano(6, { item: null });
+        por(c - 3, 9, 'B');
+      },
+      rio(n) {
+        // n ≡ 0 (mod 5): termina com 1 coluna de água antes da margem,
+        // para o último galho não virar parede para quem volta pela margem.
+        for (let i = 0; i < n; i++) {
+          por(c + i, 10, '~'); por(c + i, 11, '~');
+          if (i % 5 >= 1 && i % 5 <= 3) {
+            por(c + i, 8, '=');
+            if (i % 5 === 2) por(c + i, 7, i % 10 === 2 ? 'f' : 'a');
+          }
+        }
+        c += n;
+      },
+      chefona() {
+        P.bandeira(); // para recomeçar pertinho da chefona
+        P.plano(4, { item: null });
+        P.plano(24, { item: null });
+        por(c - 12, 8, 'O');
+        P.plano(6, { item: null });
+      },
+      estufa() {
+        P.plano(30, { cada: 5 });
+        P.plano(12, { item: null });
+        por(c - 9, 9, 'E');
+      },
+    };
+
+    // ---- Mata ----
+    P.plano(8, { item: null }); por(3, 9, 'S');
+    P.plano(10); P.tronco(1); P.plano(6); P.degraus(); P.onca(); P.buraco(2); P.plano(6);
+    P.galho(); P.tronco(2); P.onca(); P.plano(8); P.buraco(3); P.degraus(); P.bandeira();
+    P.plano(6); P.galho(); P.onca(); P.tronco(1); P.plano(10); P.buraco(3); P.plano(6);
+    secoes.push({ ate: c, nome: 'mata' });
+
+    // ---- Rio ----
+    P.plano(6); P.rio(20); P.plano(8); P.onca(); P.plano(6); P.rio(25); P.plano(6);
+    P.galho(); P.onca(); P.rio(15); P.plano(8); P.bandeira(); P.plano(6); P.tronco(2);
+    P.onca(); P.plano(8); P.rio(20); P.plano(6);
+    secoes.push({ ate: c, nome: 'rio' });
+
+    // ---- Árvores gigantes e a chefona ----
+    P.degraus(); P.galho(); P.onca(); P.tronco(2); P.buraco(3); P.galho(); P.degraus();
+    P.onca(); P.tronco(1); P.bandeira(); P.galho(); // o tronco separa a onça da bandeirinha P.tronco(1); P.onca(); P.buraco(2);
+    P.degraus(); P.plano(8); P.chefona();
+    secoes.push({ ate: c, nome: 'gigantes' });
+
+    // ---- Jardim Botânico ----
+    P.estufa();
+    secoes.push({ ate: c, nome: 'jardim' });
+
+    return { mapa: grade.map((l) => l.slice(0, c).join('')), secoes };
+  }
+
+  const construido = construirMapa();
+  J.MAPA_FASE = construido.mapa;
+  J.SECOES = construido.secoes;
+
+  J.secaoEm = function (xPixel) {
+    const col = Math.floor(xPixel / J.TILE);
+    const s = J.SECOES.find((sec) => col < sec.ate);
+    return (s || J.SECOES[J.SECOES.length - 1]).nome;
+  };
+
+  J.carregarFase = function (linhas) {
+    const T = J.TILE;
+    const colunas = linhas[0].length;
+    const tiles = linhas.map((l) => l.split(''));
+    const fase = {
+      colunas, linhas: linhas.length, tiles,
+      coletaveis: [], oncas: [], bandeiras: [], inicio: { x: 0, y: 0 }, fim: null,
+    };
+    tiles.forEach((linha, lin) => linha.forEach((ch, col) => {
+      const x = col * T, y = lin * T;
+      if (ch === 'a' || ch === 'f') fase.coletaveis.push({ x: x + 3, y: y + 3, w: 10, h: 10, tipo: ch === 'a' ? 'acai' : 'fruta', pego: false });
+      else if (ch === 'o' || ch === 'O') fase.oncas.push({ x, y, chefona: ch === 'O' });
+      else if (ch === 'B') fase.bandeiras.push({ x, y, ativa: false });
+      else if (ch === 'S') fase.inicio = { x, y };
+      else if (ch === 'E') fase.fim = { x, y: (lin + 1) * T - 64, w: 48, h: 64 };
+      else return;
+      linha[col] = '.';
+    }));
+    fase.coletaveis.sort((a, b) => a.x - b.x);
+    fase.bandeiras.sort((a, b) => a.x - b.x);
+    fase.tile = (col, lin) => (lin >= 0 && lin < fase.linhas && col >= 0 && col < colunas ? tiles[lin][col] : '.');
+    fase.solido = (col, lin) => {
+      if (col < 0 || col >= colunas) return true;
+      if (lin < 0 || lin >= fase.linhas) return false;
+      return SOLIDOS.includes(tiles[lin][col]);
+    };
+    fase.perigo = (col, lin) => fase.tile(col, lin) === '~';
+    return fase;
+  };
+})(globalThis.Jogo = globalThis.Jogo || {});
+
+// ==== entidades.js ====
+(function (J) {
+  const HISTORICO_MAX = 60;
+  const DIST_REAPARECER = 160;
+
+  // ---------- Vic ----------
+  // Folgas para o pulo: ↑ apertado um pouco antes de pousar ou logo depois de sair da beirada ainda vale.
+  const FOLGA_ANTES = 0.12;
+  const FOLGA_BEIRADA = 0.1;
+
+  J.criarVic = (x, y) => ({
+    x, y, w: 10, h: 20, vx: 0, vy: 0, noChao: false, olhandoDireita: true,
+    coracoes: 3, invencivel: 0, animTempo: 0, bufferPulo: 0, coyote: 0,
+  });
+
+  J.atualizarVic = function (vic, entrada, fase, dt) {
+    const dir = (entrada.direita ? 1 : 0) - (entrada.esquerda ? 1 : 0);
+    vic.vx = dir * J.VEL_ANDAR;
+    if (dir !== 0) vic.olhandoDireita = dir > 0;
+    if (entrada.puloApertado) vic.bufferPulo = FOLGA_ANTES;
+    if (vic.noChao) vic.coyote = FOLGA_BEIRADA;
+    let pulou = false;
+    if (vic.bufferPulo > 0 && vic.coyote > 0) {
+      vic.vy = -J.VEL_PULO; pulou = true; vic.bufferPulo = 0; vic.coyote = 0;
+    }
+    vic.noChao = J.moverCorpo(vic, fase, dt).noChao;
+    vic.bufferPulo = Math.max(0, vic.bufferPulo - dt);
+    if (!vic.noChao) vic.coyote = Math.max(0, vic.coyote - dt);
+    vic.invencivel = Math.max(0, vic.invencivel - dt);
+    vic.animTempo += dt;
+    return { pulou };
+  };
+
+  // ---------- Gatos ----------
+  J.criarGato = (nome, atraso) => ({ nome, atraso, x: 0, y: 0, w: 14, h: 9, olhandoDireita: true, andando: false });
+
+  // Só registra quando a Vic se mexe: parada, os gatos param onde estão em vez de subir nela.
+  J.registrarHistorico = function (historico, vic) {
+    const ultimo = historico[historico.length - 1];
+    const pes = vic.y + vic.h;
+    if (ultimo && Math.abs(ultimo.x - vic.x) < 0.01 && Math.abs(ultimo.pes - pes) < 0.01) return;
+    historico.push({ x: vic.x, pes, olhandoDireita: vic.olhandoDireita });
+    if (historico.length > HISTORICO_MAX) historico.splice(0, historico.length - HISTORICO_MAX);
+  };
+
+  // Recria um rastro reto atrás da Vic (1 px por quadro), para os gatos reaparecerem atrás dela.
+  J.reiniciarHistorico = function (historico, vic) {
+    historico.length = 0;
+    const sentido = vic.olhandoDireita ? -1 : 1;
+    for (let i = HISTORICO_MAX - 1; i >= 0; i--) {
+      historico.push({ x: vic.x + sentido * i, pes: vic.y + vic.h, olhandoDireita: vic.olhandoDireita });
+    }
+  };
+
+  J.atualizarGato = function (gato, historico, vic) {
+    const antesX = gato.x;
+    const i = historico.length - 1 - gato.atraso;
+    if (i >= 0) {
+      const alvo = historico[i];
+      gato.x = alvo.x;
+      gato.y = alvo.pes - gato.h;
+      gato.olhandoDireita = alvo.olhandoDireita;
+    }
+    if (Math.abs(gato.x - vic.x) > DIST_REAPARECER) {
+      gato.x = vic.olhandoDireita ? vic.x - gato.atraso : vic.x + gato.atraso;
+      gato.y = vic.y + vic.h - gato.h;
+      gato.olhandoDireita = vic.olhandoDireita;
+    }
+    gato.andando = Math.abs(gato.x - antesX) > 0.01;
+  };
+
+  // ---------- Onças ----------
+  J.criarOnca = function (x, y, chefona) {
+    const w = chefona ? 40 : 20, h = chefona ? 24 : 12;
+    return {
+      x, y: y + J.TILE - h, w, h, vx: chefona ? -20 : -30, vy: 0, estado: 'andando',
+      vidas: chefona ? 3 : 1, chefona, invencivel: 0, origemX: x, inicioFuga: null, animTempo: 0,
+    };
+  };
+
+  function semChaoAFrente(onca, fase) {
+    const T = J.TILE;
+    const pe = onca.vx > 0 ? onca.x + onca.w + 1 : onca.x - 1;
+    return !fase.solido(Math.floor(pe / T), Math.floor((onca.y + onca.h + 1) / T));
+  }
+
+  J.atualizarOnca = function (onca, fase, dt, vic) {
+    onca.invencivel = Math.max(0, onca.invencivel - dt);
+    onca.animTempo += dt;
+    if (onca.estado === 'foi') return;
+    if (onca.estado === 'fugindo') {
+      if (onca.inicioFuga === null) {
+        onca.inicioFuga = onca.x;
+        onca.vx = (onca.x + onca.w / 2 >= vic.x + vic.w / 2 ? 1 : -1) * 180;
+      }
+      onca.x += onca.vx * dt;
+      if (Math.abs(onca.x - onca.inicioFuga) > 240) onca.estado = 'foi';
+      return;
+    }
+    const r = J.moverCorpo(onca, fase, dt);
+    if (r.bateuParede || (r.noChao && semChaoAFrente(onca, fase))) onca.vx = -onca.vx;
+    if (onca.chefona) {
+      const lim = 2 * J.TILE;
+      if (onca.x < onca.origemX - lim) { onca.x = onca.origemX - lim; onca.vx = Math.abs(onca.vx); }
+      if (onca.x > onca.origemX + lim) { onca.x = onca.origemX + lim; onca.vx = -Math.abs(onca.vx); }
+    }
+  };
+
+  J.contatoOnca = function (vic, onca) {
+    if (onca.estado !== 'andando' || onca.invencivel > 0 || !J.colide(vic, onca)) return null;
+    if (vic.vy > 0 && vic.y + vic.h - onca.y <= 8) return 'pisou';
+    return 'machucou';
+  };
+})(globalThis.Jogo = globalThis.Jogo || {});
+
+// ==== regras.js ====
+(function (J) {
+  const INVENCIVEL = 2;
+  J.ESPERA_FINAL = 2.5; // a mensagem final fica protegida de um ↑ sem querer
+
+  // Converte a posição de um tile (canto superior esquerdo) na posição da Vic em pé nele.
+  const emPeNoTile = (p) => ({ x: p.x + 3, y: p.y + J.TILE - 20 });
+
+  J.criarJogo = function ({ mapa = J.MAPA_FASE, aleatorio = Math.random } = {}) {
+    const fase = J.carregarFase(mapa);
+    const inicio = emPeNoTile(fase.inicio);
+    const vic = J.criarVic(inicio.x, inicio.y);
+    const jogo = {
+      tela: 'inicio', mapa, fase, vic,
+      gatos: [J.criarGato('Roquinho', 14), J.criarGato('Alya', 28)],
+      oncas: fase.oncas.map((o) => J.criarOnca(o.x, o.y, o.chefona)),
+      historico: [],
+      oncasEspantadas: 0, frutas: 0,
+      ultimaBandeira: { ...inicio }, ultimoChaoSeguro: { ...inicio },
+      proximoMiado: 10 + aleatorio() * 10, proximoGato: 0, aleatorio,
+      tempo: 0, tempoFinal: 0, eventos: [],
+    };
+    jogo.chefona = jogo.oncas.find((o) => o.chefona) || null;
+    J.reiniciarHistorico(jogo.historico, vic);
+    for (const g of jogo.gatos) J.atualizarGato(g, jogo.historico, vic);
+    return jogo;
+  };
+
+  J.voltarParaBandeira = function (jogo) {
+    const v = jogo.vic;
+    v.x = jogo.ultimaBandeira.x; v.y = jogo.ultimaBandeira.y;
+    v.vx = 0; v.vy = 0; v.coracoes = 3; v.invencivel = INVENCIVEL;
+    J.reiniciarHistorico(jogo.historico, v);
+  };
+
+  J.levarDano = function (jogo) {
+    const v = jogo.vic;
+    if (v.invencivel > 0) return false;
+    v.coracoes--;
+    v.invencivel = INVENCIVEL;
+    jogo.eventos.push('dano');
+    if (v.coracoes <= 0) J.voltarParaBandeira(jogo);
+    return true;
+  };
+
+  function irParaChaoSeguro(jogo) {
+    const v = jogo.vic;
+    v.x = jogo.ultimoChaoSeguro.x; v.y = jogo.ultimoChaoSeguro.y;
+    v.vx = 0; v.vy = 0; v.invencivel = INVENCIVEL;
+    J.reiniciarHistorico(jogo.historico, v);
+  }
+
+  function chaoSeguroSob(fase, v) {
+    const T = J.TILE;
+    const lin = Math.floor((v.y + v.h + 1) / T);
+    const c0 = Math.floor(v.x / T), c1 = Math.floor((v.x + v.w) / T);
+    for (let c = c0; c <= c1; c++) if (!fase.solido(c, lin)) return false;
+    for (let c = c0 - 1; c <= c1 + 1; c++) if (fase.perigo(c, lin) || fase.perigo(c, lin - 1)) return false;
+    return true;
+  }
+
+  function verificarQueda(jogo) {
+    const { vic: v, fase } = jogo;
+    const T = J.TILE;
+    const caiu = v.y > fase.linhas * T;
+    const naAgua = fase.perigo(Math.floor((v.x + v.w / 2) / T), Math.floor((v.y + v.h / 2) / T));
+    if (!caiu && !naAgua) return;
+    const eraOUltimo = v.coracoes === 1;
+    const danou = J.levarDano(jogo);
+    if (!(eraOUltimo && danou)) irParaChaoSeguro(jogo); // se não voltou para a bandeira
+  }
+
+  function atualizarOncas(jogo, dt) {
+    const v = jogo.vic;
+    for (const onca of jogo.oncas) {
+      J.atualizarOnca(onca, jogo.fase, dt, v);
+      const contato = J.contatoOnca(v, onca);
+      if (contato === 'pisou') {
+        v.vy = -J.VEL_PULO * 0.6;
+        onca.vidas--;
+        if (onca.vidas <= 0) {
+          onca.estado = 'fugindo';
+          jogo.oncasEspantadas++;
+          jogo.eventos.push('oncaFoge');
+        } else {
+          onca.invencivel = 0.6;
+          jogo.eventos.push('pisouChefona');
+        }
+      } else if (contato === 'machucou') {
+        J.levarDano(jogo);
+      }
+    }
+  }
+
+  function barreiraChefona(jogo) {
+    const c = jogo.chefona;
+    if (!c || c.estado !== 'andando') return;
+    const limite = c.origemX + 2 * J.TILE + c.w;
+    if (jogo.vic.x + jogo.vic.w > limite) jogo.vic.x = limite - jogo.vic.w;
+  }
+
+  function coletarEMarcar(jogo) {
+    const { vic: v, fase } = jogo;
+    const T = J.TILE;
+    for (const k of fase.coletaveis) {
+      if (!k.pego && J.colide(v, k)) { k.pego = true; jogo.frutas++; jogo.eventos.push('fruta'); }
+    }
+    for (const b of fase.bandeiras) {
+      if (!b.ativa && J.colide(v, { x: b.x, y: b.y - T, w: T, h: 2 * T })) {
+        b.ativa = true;
+        jogo.ultimaBandeira = emPeNoTile(b);
+        jogo.eventos.push('bandeira');
+      }
+    }
+    if (fase.fim && J.colide(v, fase.fim)) { jogo.tela = 'final'; jogo.tempoFinal = 0; jogo.eventos.push('vitoria'); }
+  }
+
+  function miar(jogo, dt) {
+    jogo.proximoMiado -= dt;
+    if (jogo.proximoMiado > 0) return;
+    jogo.eventos.push(`miau:${jogo.gatos[jogo.proximoGato].nome}`);
+    jogo.proximoGato = 1 - jogo.proximoGato;
+    jogo.proximoMiado = 10 + jogo.aleatorio() * 10;
+  }
+
+  J.atualizarJogo = function (jogo, entrada, dt) {
+    jogo.eventos = [];
+    dt = Math.min(dt, J.DT_MAX);
+    if (jogo.tela === 'inicio') {
+      if (entrada.qualquerTecla) jogo.tela = 'jogando';
+      return;
+    }
+    if (jogo.tela === 'final') {
+      jogo.tempoFinal += dt;
+      if ((entrada.puloApertado || entrada.toqueTela) && jogo.tempoFinal >= J.ESPERA_FINAL) {
+        Object.assign(jogo, J.criarJogo({ mapa: jogo.mapa, aleatorio: jogo.aleatorio }), { tela: 'jogando' });
+      }
+      return;
+    }
+    jogo.tempo += dt;
+    const v = jogo.vic;
+    if (J.atualizarVic(v, entrada, jogo.fase, dt).pulou) jogo.eventos.push('pulo');
+    barreiraChefona(jogo);
+    verificarQueda(jogo);
+    if (v.noChao && chaoSeguroSob(jogo.fase, v)) jogo.ultimoChaoSeguro = { x: v.x, y: v.y };
+    atualizarOncas(jogo, dt);
+    coletarEMarcar(jogo);
+    J.registrarHistorico(jogo.historico, v);
+    for (const g of jogo.gatos) J.atualizarGato(g, jogo.historico, v);
+    miar(jogo, dt);
+  };
+})(globalThis.Jogo = globalThis.Jogo || {});
+
+// ==== entrada.js ====
+(function (J) {
+  const SETAS = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
+
+  J.criarEntrada = function (alvo) {
+    const seguradas = { esquerda: false, direita: false };
+    const bordas = { puloApertado: false, qualquerTecla: false, alternarSom: false, toqueTela: false };
+    const toques = new Map(); // dedo (pointerId) no direcional -> 'esquerda' | 'direita'
+    const tocando = (lado) => { for (const l of toques.values()) if (l === lado) return true; return false; };
+
+    alvo.addEventListener('keydown', (e) => {
+      if (SETAS.includes(e.key) || e.key === ' ') e.preventDefault();
+      if (e.key === 'ArrowLeft') seguradas.esquerda = true;
+      if (e.key === 'ArrowRight') seguradas.direita = true;
+      if (e.repeat) return;
+      bordas.qualquerTecla = true;
+      if (e.key === 'ArrowUp') bordas.puloApertado = true;
+      if (e.key === 'm' || e.key === 'M') bordas.alternarSom = true;
+    });
+    alvo.addEventListener('keyup', (e) => {
+      if (e.key === 'ArrowLeft') seguradas.esquerda = false;
+      if (e.key === 'ArrowRight') seguradas.direita = false;
+    });
+    alvo.addEventListener('blur', () => {
+      seguradas.esquerda = false;
+      seguradas.direita = false;
+      toques.clear();
+    });
+
+    return {
+      ler() {
+        const r = {
+          ...bordas,
+          esquerda: seguradas.esquerda || tocando('esquerda'),
+          direita: seguradas.direita || tocando('direita'),
+        };
+        bordas.puloApertado = false; bordas.qualquerTecla = false; bordas.alternarSom = false; bordas.toqueTela = false;
+        return r;
+      },
+
+      // Controles de toque: direcional (◀ ▶) e botão de pulo.
+      // O direcional acompanha o dedo: dá para deslizar de ◀ para ▶ sem soltar.
+      ligarToque({ dpad, pular, ignorar }) {
+        const lado = (e) => {
+          const r = dpad.getBoundingClientRect();
+          return e.clientX < r.left + r.width / 2 ? 'esquerda' : 'direita';
+        };
+        const marcar = () => { dpad.dataset.ativo = [...toques.values()].join(' '); };
+        dpad.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          try { dpad.setPointerCapture(e.pointerId); } catch (_) { /* ok */ }
+          toques.set(e.pointerId, lado(e));
+          marcar();
+        });
+        dpad.addEventListener('pointermove', (e) => {
+          if (toques.has(e.pointerId)) { toques.set(e.pointerId, lado(e)); marcar(); }
+        });
+        const soltar = (e) => { toques.delete(e.pointerId); marcar(); };
+        ['pointerup', 'pointercancel', 'lostpointercapture'].forEach((t) => dpad.addEventListener(t, soltar));
+
+        pular.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          bordas.puloApertado = true;
+          pular.classList.add('ativo');
+        });
+        ['pointerup', 'pointercancel', 'pointerleave'].forEach((t) =>
+          pular.addEventListener(t, () => pular.classList.remove('ativo')));
+
+        // Qualquer toque na tela começa o jogo (e, no final, recomeça).
+        alvo.addEventListener('pointerdown', (e) => {
+          if (ignorar && e.target.closest && e.target.closest(ignorar)) return;
+          bordas.qualquerTecla = true;
+          bordas.toqueTela = true;
+        });
+        alvo.addEventListener('contextmenu', (e) => e.preventDefault());
+      },
+    };
+  };
+})(globalThis.Jogo = globalThis.Jogo || {});
+
+// ==== audio.js ====
+(function (J) {
+  // Sons sintetizados com Web Audio: nada é baixado, tudo nasce aqui.
+  const VOLUME = 0.15;
+  const BPM = 132;
+  const COLCHEIA = 60 / BPM / 2;
+  // Melodia alegre (semitons a partir de Dó 5; null = pausa) e baixo (a partir de Dó 3).
+  const MELODIA = [0, 4, 7, 9, 7, 4, 2, null, 2, 5, 9, 11, 9, 5, 4, null,
+    0, 4, 7, 12, 11, 9, 7, null, 5, 4, 2, 4, 0, null, null, null];
+  const BAIXO = [0, 0, 7, 7, 5, 5, 7, 7];
+  const freq = (base, semitons) => base * Math.pow(2, semitons / 12);
+
+  // ---------- Música de fundo em arquivo ----------
+  // Coloque um arquivo com este nome na MESMA pasta do jogo e ele toca em loop durante a partida.
+  // Se o arquivo não existir (ou não carregar), o jogo usa a musiquinha sintetizada acima.
+  const MUSICA_ARQUIVO = 'musica.mp3';
+  const MUSICA_VOLUME = 0.35; // de 0 (mudo) a 1 (máximo). No iPhone o volume é sempre o do aparelho.
+
+  function criarMusicaArquivo() {
+    if (typeof Audio === 'undefined') return null;
+    const el = new Audio();
+    const m = { el, ok: true, liberada: false };
+    el.loop = true;
+    el.preload = 'auto';
+    el.volume = MUSICA_VOLUME;
+    el.addEventListener('error', () => { m.ok = false; }); // sem arquivo: volta para a sintetizada
+    el.src = MUSICA_ARQUIVO;
+    return m;
+  }
+
+  J.criarAudio = function () {
+    let ctx = null, mestre = null, ligado = true;
+    let passoMusica = 0, proximoTempo = 0, tocandoMusica = false;
+    const arquivo = criarMusicaArquivo();
+    let paginaVisivel = true;
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        paginaVisivel = !document.hidden;
+        if (!paginaVisivel && arquivo) arquivo.el.pause(); // não toca com o celular bloqueado ou em outra aba
+      });
+    }
+
+    // Toca/pausa o MP3. Devolve true se é ele quem está cuidando da música.
+    function musicaDeArquivo(deveTocar) {
+      if (!arquivo || !arquivo.ok) return false;
+      if (deveTocar && paginaVisivel) {
+        if (arquivo.el.paused && arquivo.liberada) arquivo.el.play().catch(() => {});
+      } else if (!arquivo.el.paused) {
+        arquivo.el.pause();
+      }
+      return true;
+    }
+
+    function destravar() {
+      // Celulares só deixam tocar áudio depois de um toque: "liberamos" o MP3 aqui, dentro do toque.
+      if (arquivo && arquivo.ok && !arquivo.liberada) {
+        arquivo.el.play().then(() => {
+          arquivo.liberada = true;
+          if (!(ligado && J.jogoAtual && J.jogoAtual.tela === 'jogando')) arquivo.el.pause();
+        }).catch(() => {});
+      }
+      const AC = globalThis.AudioContext || globalThis.webkitAudioContext;
+      if (!AC) return;
+      if (!ctx) {
+        ctx = new AC();
+        mestre = ctx.createGain();
+        mestre.gain.value = ligado ? VOLUME : 0;
+        mestre.connect(ctx.destination);
+      }
+      if (ctx.state === 'suspended') ctx.resume();
+    }
+
+    function nota(f, inicio, dur, { tipo = 'square', vol = 0.3, fFim = null, fMeio = null } = {}) {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = tipo;
+      o.frequency.setValueAtTime(f, inicio);
+      if (fMeio) o.frequency.linearRampToValueAtTime(fMeio, inicio + dur * 0.35);
+      if (fFim) o.frequency.linearRampToValueAtTime(fFim, inicio + dur);
+      g.gain.setValueAtTime(0.0001, inicio);
+      g.gain.linearRampToValueAtTime(vol, inicio + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, inicio + dur);
+      o.connect(g); g.connect(mestre);
+      o.start(inicio); o.stop(inicio + dur + 0.02);
+    }
+
+    function ruido(inicio, dur, vol = 0.25) {
+      const n = Math.floor(ctx.sampleRate * dur);
+      const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+      const s = ctx.createBufferSource(), g = ctx.createGain();
+      s.buffer = buf; g.gain.value = vol;
+      s.connect(g); g.connect(mestre); s.start(inicio);
+    }
+
+    function miau(grave, t) {
+      const base = grave ? 420 : 720;
+      const o = ctx.createOscillator(), g = ctx.createGain(), filtro = ctx.createBiquadFilter();
+      o.type = 'sawtooth';
+      filtro.type = 'lowpass'; filtro.frequency.value = grave ? 1400 : 2200;
+      o.frequency.setValueAtTime(base, t);
+      o.frequency.linearRampToValueAtTime(base * 1.45, t + 0.15);
+      o.frequency.linearRampToValueAtTime(base * 0.85, t + 0.45);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.25, t + 0.06);
+      g.gain.linearRampToValueAtTime(0.2, t + 0.3);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+      o.connect(filtro); filtro.connect(g); g.connect(mestre);
+      o.start(t); o.stop(t + 0.55);
+    }
+
+    const EFEITOS = {
+      pulo: (t) => nota(300, t, 0.14, { fFim: 650, vol: 0.2 }),
+      fruta: (t) => { nota(988, t, 0.07, { tipo: 'triangle', vol: 0.35 }); nota(1319, t + 0.07, 0.1, { tipo: 'triangle', vol: 0.35 }); },
+      oncaFoge: (t) => { ruido(t, 0.25, 0.2); nota(700, t, 0.3, { fFim: 180, vol: 0.2 }); },
+      pisouChefona: (t) => nota(240, t, 0.18, { fFim: 120, vol: 0.3 }),
+      dano: (t) => nota(440, t, 0.35, { fFim: 110, tipo: 'sawtooth', vol: 0.2 }),
+      bandeira: (t) => [523, 659, 784, 1047].forEach((f, i) => nota(f, t + i * 0.08, 0.12, { tipo: 'triangle', vol: 0.3 })),
+      vitoria: (t) => [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) =>
+        nota(f, t + i * 0.14, i === 6 ? 0.8 : 0.16, { tipo: 'square', vol: 0.22 })),
+      'miau:Roquinho': (t) => miau(true, t),
+      'miau:Alya': (t) => miau(false, t),
+    };
+
+    function tocar(evento) {
+      if (!ctx || !ligado) return;
+      const efeito = EFEITOS[evento];
+      if (efeito) efeito(ctx.currentTime + 0.01);
+    }
+
+    // Toca a música adiantada em pequenos blocos (agendamento com folga).
+    function atualizarMusica(tela) {
+      const deveTocar = ligado && tela === 'jogando';
+      if (musicaDeArquivo(deveTocar)) return; // o MP3 está cuidando da música
+      if (!ctx || ctx.state !== 'running') return;
+      if (!deveTocar) { tocandoMusica = false; return; }
+      if (!tocandoMusica) { tocandoMusica = true; proximoTempo = ctx.currentTime + 0.05; passoMusica = 0; }
+      // Depois de uma aba escondida, retoma do agora em vez de tocar tudo o que ficou para trás.
+      if (proximoTempo < ctx.currentTime) proximoTempo = ctx.currentTime + 0.05;
+      while (proximoTempo < ctx.currentTime + 0.2) {
+        const m = MELODIA[passoMusica % MELODIA.length];
+        if (m !== null) nota(freq(523.25, m), proximoTempo, COLCHEIA * 0.9, { tipo: 'square', vol: 0.12 });
+        if (passoMusica % 2 === 0) {
+          const b = BAIXO[(passoMusica / 2) % BAIXO.length];
+          nota(freq(130.81, b), proximoTempo, COLCHEIA * 1.8, { tipo: 'triangle', vol: 0.25 });
+        }
+        proximoTempo += COLCHEIA;
+        passoMusica++;
+      }
+    }
+
+    function alternar() {
+      ligado = !ligado;
+      if (mestre) mestre.gain.setValueAtTime(ligado ? VOLUME : 0, ctx.currentTime);
+      if (!ligado) tocandoMusica = false;
+      return ligado;
+    }
+
+    return {
+      destravar, tocar, alternar, atualizarMusica,
+      get ligado() { return ligado; },
+    };
+  };
+})(globalThis.Jogo = globalThis.Jogo || {});
+
+// ==== render.js ====
+(function (J) {
+  const LARG = 320, ALT = 192;
+  const FONTE = '"Courier New", monospace';
+
+  const CENARIOS = {
+    mata: { ceu: ['#bfe9d0', '#ade2c2', '#9ad9b3', '#88cfa4'], fundo: '#3d8a58', frente: '#2f7a4a', tronco: '#5a3d24', grama: '#4caf50', tufo: '#3a8f3f' },
+    rio: { ceu: ['#cdeef2', '#b8e4e8', '#a3d8d8', '#92cdc6'], fundo: '#4a9a6a', frente: '#367f55', tronco: '#5e4128', grama: '#52b35a', tufo: '#3d9044' },
+    gigantes: { ceu: ['#a9d9b8', '#93cca4', '#7fbf93', '#6fb385'], fundo: '#2c6e45', frente: '#215a37', tronco: '#4a3220', grama: '#43a04a', tufo: '#357f3b', cipo: true },
+    jardim: { ceu: ['#ffd9a8', '#fbcf9e', '#f6c696', '#f0bd90'], fundo: '#6fae6a', frente: '#4f9a52', tronco: '#6b4a2b', grama: '#79c26a', tufo: '#5aa85a', jardim: true },
+  };
+
+  // Gerador pseudoaleatório determinístico (o cenário é sempre o mesmo).
+  function semente(n) { let s = n; return () => { s = (s * 16807) % 2147483647; return s / 2147483647; }; }
+
+  function bolinha(g, cx, cy, r, cor) {
+    g.fillStyle = cor;
+    for (let dy = -r; dy <= r; dy++) {
+      const w = Math.round(Math.sqrt(r * r - dy * dy));
+      g.fillRect(Math.round(cx - w), Math.round(cy + dy), w * 2 + 1, 1);
+    }
+  }
+
+  // Árvores do fundo: posições fixas, repetidas a cada `periodo` px.
+  function camada(periodo, n, seed, rMin, rMax, yBase) {
+    const r = semente(seed);
+    return { periodo, arvores: Array.from({ length: n }, (_, i) => ({ x: (i / n) * periodo + r() * 20, r: rMin + r() * (rMax - rMin), y: yBase + r() * 18 })) };
+  }
+  const CAMADA_FUNDO = camada(480, 8, 7, 16, 24, 20);
+  const CAMADA_FRENTE = camada(400, 5, 11, 11, 15, 52);
+
+  function desenharCamada(g, cam, desloc, cor, corTronco, alto) {
+    for (let base = Math.floor(desloc / cam.periodo) - 1; base <= Math.floor((desloc + LARG) / cam.periodo) + 1; base++) {
+      for (const a of cam.arvores) {
+        const x = base * cam.periodo + a.x - desloc;
+        if (x < -40 || x > LARG + 40) continue;
+        if (corTronco) { g.fillStyle = corTronco; g.fillRect(Math.round(x - 2), Math.round(a.y), 5, 160 - a.y); }
+        bolinha(g, x, a.y - (alto ? 14 : 0), a.r, cor);
+      }
+    }
+  }
+
+  // Estufa do Jardim Botânico (61x47), pré-desenhada num canvas pequeno.
+  function criarEstufa() {
+    const c = document.createElement('canvas');
+    c.width = 61; c.height = 47;
+    const g = c.getContext('2d');
+    const X = (x) => x - 50, Y = (y) => y - 4;
+    const vidro = '#cfeaf3', aro = '#ffffff';
+    g.fillStyle = vidro;
+    g.fillRect(X(50), Y(30), 61, 17);
+    for (let i = 0; i < 8; i++) {
+      const h = Math.round(Math.sqrt(64 - (8 - i) * (8 - i)));
+      g.fillRect(X(50 + i), Y(30 - h), 1, h);
+      g.fillRect(X(110 - i), Y(30 - h), 1, h);
+    }
+    g.fillRect(X(62), Y(18), 37, 12);
+    for (let i = 0; i < 10; i++) { g.fillRect(X(70 + i), Y(8 + (10 - i)), 1, i + 1); g.fillRect(X(90 - i), Y(8 + (10 - i)), 1, i + 1); }
+    g.fillRect(X(80), Y(4), 1, 4);
+    g.fillStyle = aro;
+    for (let x = 50; x <= 110; x += 5) g.fillRect(X(x), Y(30), 1, 17);
+    g.fillRect(X(50), Y(30), 61, 1); g.fillRect(X(50), Y(40), 61, 1);
+    g.fillRect(X(62), Y(18), 37, 1); g.fillRect(X(62), Y(24), 37, 1);
+    for (let x = 62; x <= 98; x += 6) g.fillRect(X(x), Y(18), 1, 12);
+    g.fillRect(X(80), Y(8), 1, 22);
+    g.fillStyle = '#8fb9c6'; g.fillRect(X(76), Y(38), 9, 9); // porta
+    g.fillStyle = aro; g.fillRect(X(80), Y(38), 1, 9);
+    return c;
+  }
+
+  J.criarRenderizador = function (canvas) {
+    const tela = canvas.getContext('2d');
+    const mundo = document.createElement('canvas');
+    mundo.width = LARG; mundo.height = ALT;
+    const g = mundo.getContext('2d');
+    const estufa = criarEstufa();
+    let escala = 1;
+
+    // A escala é inteira em pixels FÍSICOS da tela (devicePixelRatio): assim o pixel art
+    // fica nítido e o jogo ocupa bem a tela de celulares, que têm 2 ou 3 pixels por ponto.
+    function ajustar() {
+      const dpr = window.devicePixelRatio || 1;
+      const larg = window.innerWidth * dpr, alt = window.innerHeight * dpr;
+      const cabe = Math.min(larg / LARG, alt / ALT);
+      escala = Math.max(1, Math.floor(cabe));
+      // Se a escala inteira deixar muita sobra (telas pequenas), estica para ocupar a tela.
+      const mostrar = escala / cabe >= 0.85 ? escala : cabe;
+      if (mostrar !== escala) escala = Math.max(1, Math.ceil(cabe));
+      canvas.width = LARG * escala; canvas.height = ALT * escala;
+      canvas.style.width = `${(LARG * mostrar) / dpr}px`; canvas.style.height = `${(ALT * mostrar) / dpr}px`;
+    }
+    ajustar();
+
+    // ---------- texto em resolução de tela ----------
+    function texto(t, x, y, { tam = 8, cor = '#ffffff', alinhar = 'left', sombra = '#00000099' } = {}) {
+      tela.font = `bold ${Math.round(tam * escala)}px ${FONTE}`;
+      tela.textAlign = alinhar; tela.textBaseline = 'top';
+      if (sombra) { tela.fillStyle = sombra; tela.fillText(t, x * escala + escala, y * escala + escala); }
+      tela.fillStyle = cor; tela.fillText(t, x * escala, y * escala);
+    }
+
+    function ceu(cen) {
+      cen.ceu.forEach((cor, i) => { g.fillStyle = cor; g.fillRect(0, i * 10, LARG, 10); });
+      g.fillStyle = cen.ceu[cen.ceu.length - 1]; g.fillRect(0, 40, LARG, ALT - 40);
+    }
+
+    function fundo(cen, camX) {
+      ceu(cen);
+      desenharCamada(g, CAMADA_FUNDO, camX * 0.3, cen.fundo, null, false);
+      if (cen.cipo) {
+        g.fillStyle = '#2a6a3f';
+        for (let i = 0; i < 6; i++) {
+          const x = ((i * 67 - camX * 0.5) % (LARG + 40) + LARG + 40) % (LARG + 40) - 20;
+          for (let y = 0; y < 70 + (i % 3) * 20; y++) g.fillRect(Math.round(x + Math.sin(y / 6) * 1.5), y, 1, 1);
+        }
+      }
+      desenharCamada(g, CAMADA_FRENTE, camX * 0.6, cen.frente, cen.tronco, cen.cipo);
+    }
+
+    function tiles(jogo, camX, tempo) {
+      const f = jogo.fase, T = J.TILE;
+      const c0 = Math.floor(camX / T), c1 = c0 + Math.ceil(LARG / T) + 1;
+      for (let c = c0; c <= c1; c++) {
+        const cen = CENARIOS[J.secaoEm(c * T)];
+        for (let l = 0; l < f.linhas; l++) {
+          const ch = f.tile(c, l);
+          const x = c * T - camX, y = l * T;
+          if (ch === '#') {
+            g.fillStyle = '#7a5532'; g.fillRect(x, y, T, T);
+            g.fillStyle = '#6a4628'; g.fillRect(x + ((c * 7 + l * 3) % 12), y + ((c * 5 + l) % 12) + 2, 2, 2);
+            if (f.tile(c, l - 1) !== '#') {
+              g.fillStyle = cen.grama; g.fillRect(x, y, T, 4);
+              g.fillStyle = cen.tufo; g.fillRect(x + 2, y + 4, 3, 1); g.fillRect(x + 10, y + 4, 2, 1);
+              g.fillStyle = cen.grama; g.fillRect(x + 4, y - 1, 1, 1); g.fillRect(x + 12, y - 1, 1, 1);
+            }
+          } else if (ch === '=') {
+            g.fillStyle = '#3a2614'; g.fillRect(x, y, T, 7);
+            g.fillStyle = '#8a5a33'; g.fillRect(x, y + 1, T, 5);
+            g.fillStyle = '#a7703f'; g.fillRect(x + 3, y + 2, 6, 1);
+            g.fillStyle = '#3d9044'; g.fillRect(x + ((c * 5) % 10), y - 2, 4, 2);
+          } else if (ch === 'T') {
+            g.fillStyle = '#3a2614'; g.fillRect(x + 1, y, T - 2, T);
+            g.fillStyle = '#8a5a33'; g.fillRect(x + 2, y + 1, T - 4, T - 2);
+            g.fillStyle = '#c99560'; g.fillRect(x + 4, y + 4, 8, 8);
+            g.fillStyle = '#8a5a33'; g.fillRect(x + 6, y + 6, 4, 4);
+          } else if (ch === '~') {
+            g.fillStyle = '#3a8fb7'; g.fillRect(x, y, T, T);
+            if (f.tile(c, l - 1) !== '~') {
+              g.fillStyle = '#7fc8e8';
+              const onda = Math.floor(tempo * 4 + c) % 4;
+              g.fillRect(x, y, T, 2); g.fillRect(x + onda * 4, y + 3, 4, 1);
+            } else {
+              g.fillStyle = '#2f7da3'; g.fillRect(x + ((c * 3 + l) % 10), y + 6, 4, 1);
+            }
+          }
+        }
+        // sebes do jardim
+        if (cen.jardim && c % 6 === 0 && f.tile(c, 10) === '#' && f.tile(c, 9) === '.') {
+          bolinha(g, c * T - camX + 8, 155, 5, '#3f8d45');
+        }
+      }
+    }
+
+    function desenharVic(v, camX) {
+      if (v.invencivel > 0 && Math.floor(v.invencivel * 10) % 2 === 0) return;
+      const S = J.sprites.vic;
+      const sp = !v.noChao ? S.pulando : v.vx !== 0 ? S.andando[Math.floor(v.animTempo * 8) % 2] : S.parado;
+      J.desenharSprite(g, sp, v.x - 1 - camX, v.y, { espelhar: !v.olhandoDireita });
+    }
+
+    function desenharGato(gato, camX, tempo) {
+      const S = J.sprites[gato.nome === 'Roquinho' ? 'roquinho' : 'alya'];
+      const sp = gato.andando ? S.andando[Math.floor(tempo * 8) % 2] : S.parado;
+      J.desenharSprite(g, sp, gato.x - camX, gato.y, { espelhar: !gato.olhandoDireita });
+    }
+
+    function desenharOnca(o, camX) {
+      if (o.estado === 'foi') return;
+      if (o.invencivel > 0 && Math.floor(o.invencivel * 12) % 2 === 0) return;
+      const S = J.sprites.onca;
+      const sp = o.estado === 'fugindo' ? S.fugindo : S.andando[Math.floor(o.animTempo * 6) % 2];
+      J.desenharSprite(g, sp, o.x - camX, o.y, { espelhar: o.vx < 0, escala: o.chefona ? 2 : 1 });
+      if (o.estado === 'fugindo') { // gotinhas de susto
+        g.fillStyle = '#bfe6ff';
+        g.fillRect(o.x - camX + (o.vx > 0 ? -3 : o.w + 2), o.y - 2, 2, 2);
+      }
+    }
+
+    function coracoes(v) {
+      for (let i = 0; i < 3; i++) J.desenharSprite(g, i < v.coracoes ? J.sprites.coracao.cheio : J.sprites.coracao.vazio, 6 + i * 9, 6);
+    }
+
+    function cenaJogo(jogo) {
+      const v = jogo.vic, f = jogo.fase, T = J.TILE, t = jogo.tempo;
+      const camX = Math.round(Math.max(0, Math.min(v.x + v.w / 2 - LARG / 2, f.colunas * T - LARG)));
+      const cen = CENARIOS[J.secaoEm(camX + LARG / 2)];
+      fundo(cen, camX);
+      if (f.fim) g.drawImage(estufa, Math.round(f.fim.x + 24 - 30 - camX), f.fim.y + f.fim.h - 47);
+      tiles(jogo, camX, t);
+      for (const b of f.bandeiras) J.desenharSprite(g, b.ativa ? J.sprites.bandeira.erguida : J.sprites.bandeira.abaixada, b.x + 4 - camX, b.y);
+      for (const k of f.coletaveis) {
+        if (k.pego || k.x < camX - 16 || k.x > camX + LARG + 16) continue;
+        J.desenharSprite(g, k.tipo === 'acai' ? J.sprites.acai : J.sprites.fruta, k.x + 2 - camX, k.y + 2 + Math.round(Math.sin(t * 3 + k.x) * 1));
+      }
+      for (const o of jogo.oncas) desenharOnca(o, camX);
+      for (let i = jogo.gatos.length - 1; i >= 0; i--) desenharGato(jogo.gatos[i], camX, t);
+      desenharVic(v, camX);
+      coracoes(v);
+    }
+
+    function telaInicio(jogo) {
+      const cen = CENARIOS.mata;
+      fundo(cen, (performance.now() / 40) % 2000);
+      g.fillStyle = '#7a5532'; g.fillRect(0, 160, LARG, 32);
+      g.fillStyle = cen.grama; g.fillRect(0, 160, LARG, 4);
+      J.desenharSprite(g, J.sprites.alya.parado, 104, 142, { escala: 2 });
+      J.desenharSprite(g, J.sprites.roquinho.parado, 140, 142, { escala: 2 });
+      J.desenharSprite(g, J.sprites.vic.parado, 186, 120, { escala: 2 });
+      g.fillStyle = '#00000066'; g.fillRect(0, 10, LARG, 74);
+      blit();
+      texto('Vic, Roquinho e Alya', 160, 16, { tam: 20, cor: '#f2d36b', alinhar: 'center' });
+      texto('Uma aventura pela Amazônia', 160, 42, { tam: 10, alinhar: 'center' });
+      const toque = J.modoToque;
+      if (Math.floor(performance.now() / 500) % 2 === 0) texto(toque ? 'Toque na tela para começar' : 'Aperte uma setinha para começar', 160, 58, { tam: 9, cor: '#bff5c9', alinhar: 'center' });
+      texto(toque ? '◀ ▶ andar        ▲ pular' : '← → andar    ↑ pular    M som', 160, 72, { tam: 7, cor: '#e8e8e8', alinhar: 'center' });
+      texto('Alya', 118, 166, { tam: 7, alinhar: 'center' });
+      texto('Roquinho', 154, 166, { tam: 7, alinhar: 'center' });
+      texto('Vic', 198, 166, { tam: 7, alinhar: 'center' });
+    }
+
+    function telaFinal(jogo) {
+      CENARIOS.jardim.ceu.forEach((cor, i) => { g.fillStyle = cor; g.fillRect(0, i * 12, LARG, 12); });
+      g.fillStyle = '#f0bd90'; g.fillRect(0, 48, LARG, 100);
+      g.drawImage(estufa, 0, 0, 61, 47, 99, 54, 122, 94);
+      g.fillStyle = '#79c26a'; g.fillRect(0, 148, LARG, 44);
+      g.fillStyle = '#3f8d45';
+      g.fillRect(24, 156, 52, 6); g.fillRect(32, 162, 36, 4); g.fillRect(244, 156, 52, 6); g.fillRect(252, 162, 36, 4);
+      g.fillStyle = '#e8d7b0';
+      for (let y = 148; y < ALT; y++) { const w = 12 + Math.round((y - 148) * 1.1); g.fillRect(160 - w, y, w * 2, 1); }
+      J.desenharSprite(g, J.sprites.roquinho.parado, 126, 165);
+      J.desenharSprite(g, J.sprites.vic.parado, 154, 152);
+      J.desenharSprite(g, J.sprites.alya.parado, 178, 165, { espelhar: true });
+      const pulo = Math.abs(Math.sin(performance.now() / 300)) * 4;
+      J.desenharSprite(g, J.sprites.coracao.cheio, 157, 140 - pulo);
+      g.fillStyle = '#00000059'; g.fillRect(0, 2, LARG, 50);
+      blit();
+      texto('Parabéns indiazinha de Manaus!!', 160, 8, { tam: 14, cor: '#ffe07a', alinhar: 'center', sombra: '#7a2a1a' });
+      texto(`Onças espantadas: ${jogo.oncasEspantadas}      Frutas: ${jogo.frutas}`, 160, 28, { tam: 8, alinhar: 'center' });
+      if (jogo.tempoFinal >= J.ESPERA_FINAL) texto(J.modoToque ? 'Toque na tela para jogar de novo' : 'Aperte ↑ para jogar de novo', 160, 40, { tam: 7, cor: '#e8e8e8', alinhar: 'center' });
+    }
+
+    function blit() {
+      tela.imageSmoothingEnabled = false;
+      tela.drawImage(mundo, 0, 0, LARG, ALT, 0, 0, LARG * escala, ALT * escala);
+    }
+
+    return {
+      ajustar,
+      desenhar(jogo) {
+        if (jogo.tela === 'inicio') return telaInicio(jogo);
+        if (jogo.tela === 'final') return telaFinal(jogo);
+        cenaJogo(jogo);
+        blit();
+        texto(`Onças espantadas: ${jogo.oncasEspantadas}`, 6, 15, { tam: 7 });
+        texto(`Frutas: ${jogo.frutas}`, 6, 24, { tam: 7, cor: '#ffe9b0' });
+      },
+    };
+  };
+})(globalThis.Jogo = globalThis.Jogo || {});
+
+// ==== principal.js ====
+(function (J) {
+  if (typeof document === 'undefined') return;
+  const PASSO = 1 / 60;
+  const canvas = document.getElementById('tela');
+  const jogo = J.criarJogo();
+  const entrada = J.criarEntrada(window);
+  const render = J.criarRenderizador(canvas);
+  const audio = J.criarAudio();
+  J.jogoAtual = jogo; // para depuração no console
+  const reajustar = () => render.ajustar();
+  window.addEventListener('resize', reajustar);
+  window.addEventListener('orientationchange', () => setTimeout(reajustar, 250));
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', reajustar);
+
+  // ---------- celular / tablet ----------
+  const ativarToque = () => {
+    if (J.modoToque) return;
+    J.modoToque = true;
+    document.body.classList.add('toque');
+  };
+  const ehCelular = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+    || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1); // iPad novo se diz "Mac"
+  if ((window.matchMedia && matchMedia('(hover: none) and (pointer: coarse)').matches)
+    || (ehCelular && navigator.maxTouchPoints > 0)) ativarToque();
+  window.addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch') ativarToque(); }, true);
+  entrada.ligarToque({
+    dpad: document.getElementById('dpad'),
+    pular: document.getElementById('bt-pular'),
+    ignorar: '#topo',
+  });
+
+  // Tela cheia (Android); no iPhone o Safari não permite, então o botão fica escondido.
+  const raiz = document.documentElement;
+  const pedirTelaCheia = raiz.requestFullscreen || raiz.webkitRequestFullscreen;
+  if (pedirTelaCheia) document.body.classList.add('pode-tela-cheia');
+  document.getElementById('tela-cheia').addEventListener('click', async (e) => {
+    e.currentTarget.blur();
+    try {
+      if (document.fullscreenElement || document.webkitFullscreenElement) {
+        await (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      } else {
+        await pedirTelaCheia.call(raiz);
+        if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape').catch(() => {});
+      }
+    } catch (_) { /* navegador recusou: segue sem tela cheia */ }
+    setTimeout(reajustar, 250);
+  });
+
+  const botaoSom = document.getElementById('som');
+  const mostrarSom = (ligado) => { botaoSom.textContent = ligado ? '🔊 Som' : '🔇 Sem som'; };
+  botaoSom.addEventListener('click', () => {
+    audio.destravar();
+    mostrarSom(audio.alternar());
+    botaoSom.blur(); // devolve as setas para o jogo
+    window.focus();
+  });
+  window.addEventListener('pointerdown', () => audio.destravar());
+  window.addEventListener('touchend', () => audio.destravar()); // iPhone só libera o som no fim do toque
+
+  J.aoEventos = (j, e) => {
+    if (e.qualquerTecla) audio.destravar();
+    if (e.alternarSom) mostrarSom(audio.alternar());
+    for (const ev of j.eventos) audio.tocar(ev);
+  };
+
+  let anterior = performance.now();
+  let acumulado = 0;
+  function quadro(agora) {
+    acumulado += Math.min((agora - anterior) / 1000, 0.25);
+    anterior = agora;
+    let passos = 0;
+    if (acumulado >= PASSO) {
+      let e = entrada.ler();
+      while (acumulado >= PASSO && passos < 5) {
+        J.atualizarJogo(jogo, e, PASSO);
+        if (J.aoEventos) J.aoEventos(jogo, e);
+        e = { ...e, puloApertado: false, qualquerTecla: false, alternarSom: false, toqueTela: false };
+        acumulado -= PASSO;
+        passos++;
+      }
+      if (passos === 5) acumulado = 0;
+    }
+    audio.atualizarMusica(jogo.tela);
+    render.desenhar(jogo);
+    requestAnimationFrame(quadro);
+  }
+  requestAnimationFrame(quadro);
+})(globalThis.Jogo = globalThis.Jogo || {});
+
+</script>
+</body>
+</html>
