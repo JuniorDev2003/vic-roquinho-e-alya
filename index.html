@@ -31,6 +31,7 @@
 
   /* ---------- controles de toque (só aparecem em celular/tablet) ---------- */
   #controles { display: none; }
+  #controles, #controles *, #tela { touch-action: none; }
   body.toque #controles { display: block; }
   body.toque.pode-tela-cheia #tela-cheia { display: inline-block; }
   .ctl {
@@ -1301,6 +1302,20 @@
     pular: document.getElementById('bt-pular'),
     ignorar: '#topo',
   });
+
+  // Sem zoom por toque duplo ou pinça: o Safari do iPhone ignora o "user-scalable=no",
+  // então cancelamos o gesto nativo. Os botões continuam funcionando pelos pointer events.
+  const semGesto = (e) => e.preventDefault();
+  document.getElementById('controles').addEventListener('touchstart', semGesto, { passive: false });
+  document.getElementById('tela').addEventListener('touchstart', semGesto, { passive: false });
+  let ultimoToqueFim = 0;
+  document.addEventListener('touchend', (e) => {
+    const agora = Date.now();
+    if (agora - ultimoToqueFim < 400 && !(e.target.closest && e.target.closest('#topo'))) e.preventDefault();
+    ultimoToqueFim = agora;
+  }, { passive: false });
+  document.addEventListener('dblclick', semGesto);
+  document.addEventListener('gesturestart', semGesto); // pinça no iPhone
 
   // Tela cheia (Android); no iPhone o Safari não permite, então o botão fica escondido.
   const raiz = document.documentElement;
