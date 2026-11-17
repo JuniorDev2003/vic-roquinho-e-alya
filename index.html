@@ -417,29 +417,26 @@
         P.plano(6, { item: null });
       },
       estufa() {
-        P.plano(30, { cada: 5 });
+        P.plano(14, { cada: 5 });
         P.plano(12, { item: null });
         por(c - 9, 9, 'E');
       },
     };
 
+    // Versão curta (~metade da original): cada área mantém o seu desafio principal.
     // ---- Mata ----
     P.plano(8, { item: null }); por(3, 9, 'S');
-    P.plano(10); P.tronco(1); P.plano(6); P.degraus(); P.onca(); P.buraco(2); P.plano(6);
-    P.galho(); P.tronco(2); P.onca(); P.plano(8); P.buraco(3); P.degraus(); P.bandeira();
-    P.plano(6); P.galho(); P.onca(); P.tronco(1); P.plano(10); P.buraco(3); P.plano(6);
+    P.plano(6); P.tronco(1); P.degraus(); P.onca(); P.buraco(2);
+    P.galho(); P.tronco(2); P.bandeira(); P.plano(4);
     secoes.push({ ate: c, nome: 'mata' });
 
     // ---- Rio ----
-    P.plano(6); P.rio(20); P.plano(8); P.onca(); P.plano(6); P.rio(25); P.plano(6);
-    P.galho(); P.onca(); P.rio(15); P.plano(8); P.bandeira(); P.plano(6); P.tronco(2);
-    P.onca(); P.plano(8); P.rio(20); P.plano(6);
+    P.plano(6); P.rio(20); P.plano(8); P.onca(); P.plano(6); P.rio(15); P.plano(8);
+    P.bandeira(); P.plano(6);
     secoes.push({ ate: c, nome: 'rio' });
 
     // ---- Árvores gigantes e a chefona ----
-    P.degraus(); P.galho(); P.onca(); P.tronco(2); P.buraco(3); P.galho(); P.degraus();
-    P.onca(); P.tronco(1); P.bandeira(); P.galho(); // o tronco separa a onça da bandeirinha P.tronco(1); P.onca(); P.buraco(2);
-    P.degraus(); P.plano(8); P.chefona();
+    P.degraus(); P.galho(); P.onca(); P.tronco(2); P.buraco(3); P.plano(6); P.chefona();
     secoes.push({ ate: c, nome: 'gigantes' });
 
     // ---- Jardim Botânico ----
