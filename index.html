@@ -86,10 +86,12 @@
     S: '#f1c6a0', // pele
     E: '#2b1d14', // olho
     P: '#e08a8a', // bochecha/boca
-    T: '#fbfaf5', // blusa branca
-    D: '#dedcd3', // short branco (um tom mais escuro, para separar da blusa)
+    T: '#ef7b6c', // blusa coral
+    W: '#fbfaf5', // casaquinho branco (estilo kimono)
+    D: '#3d5a8a', // short jeans
     B: '#6b4428', // botinhas
   };
+  // O casaquinho fica aberto na frente (aparece a blusa) e tem mangas até o pulso.
   const VIC_TRONCO = [
     '....KKKK....',
     '..KKRRRRK...',
@@ -100,13 +102,15 @@
     'KYYYSSSSSK..',
     'KYYYSSPSK...',
     'KYYYYKSSK...',
-    'KYYYKTTTK...',
-    'KYYKTTTTTK..',
-    '.KYKTTTTSK..',
-    '..KKTTTTSK..',
-    '...KTTTTK...',
+    'KYYYKWTWK...',
+    'KYYKWWTTWK..',
+    '.KYKWWTTWK..',
+    '..KKWWTTSK..',
+    '...KWTTWK...',
   ];
-  const vic = (pernas) => ({ linhas: VIC_TRONCO.concat(pernas), paleta: VIC_PALETA });
+  // A barra do casaquinho desce até o quadril, dos dois lados do short.
+  const BARRA_CASACO = '..KWDDDDWK..';
+  const vic = (pernas) => ({ linhas: VIC_TRONCO.concat([BARRA_CASACO], pernas.slice(1)), paleta: VIC_PALETA });
 
   const VIC_PARADO = [
     '...KDDDDK...',
