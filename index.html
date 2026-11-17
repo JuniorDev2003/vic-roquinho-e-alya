@@ -1241,6 +1241,36 @@
       for (let i = jogo.gatos.length - 1; i >= 0; i--) desenharGato(jogo.gatos[i], camX, t);
       desenharVic(v, camX);
       coracoes(v);
+      return camX;
+    }
+
+    // Nomes em cima dos personagens. Quando eles ficam juntinhos, os nomes
+    // sobem um pouco para não ficarem um em cima do outro.
+    const NOMES_TAM = 6;
+    function nomes(jogo, camX) {
+      const v = jogo.vic;
+      const lista = [
+        { t: 'Vic', cx: v.x + v.w / 2, y: v.y - 8, cor: '#ffe07a' },
+        ...jogo.gatos.map((g) => ({ t: g.nome, cx: g.x + g.w / 2, y: g.y - 8, cor: '#ffffff' })),
+      ];
+      tela.font = `bold ${Math.round(NOMES_TAM * escala)}px ${FONTE}`;
+      const postos = [];
+      for (const n of lista) {
+        n.larg = tela.measureText(n.t).width / escala + 2;
+        let mexeu = true;
+        while (mexeu) {
+          mexeu = false;
+          for (const p of postos) {
+            const juntoX = Math.abs(n.cx - p.cx) < (n.larg + p.larg) / 2;
+            const juntoY = Math.abs(n.y - p.y) < NOMES_TAM + 1;
+            if (juntoX && juntoY) { n.y = p.y - (NOMES_TAM + 1); mexeu = true; }
+          }
+        }
+        postos.push(n);
+      }
+      for (const n of postos) {
+        texto(n.t, n.cx - camX, Math.max(1, n.y), { tam: NOMES_TAM, cor: n.cor, alinhar: 'center', sombra: '#000000cc' });
+      }
     }
 
     function telaInicio(jogo) {
@@ -1294,8 +1324,9 @@
       desenhar(jogo) {
         if (jogo.tela === 'inicio') return telaInicio(jogo);
         if (jogo.tela === 'final') return telaFinal(jogo);
-        cenaJogo(jogo);
+        const camX = cenaJogo(jogo);
         blit();
+        nomes(jogo, camX);
         texto(`Onças espantadas: ${jogo.oncasEspantadas}`, 6, 15, { tam: 7 });
         texto(`Frutas: ${jogo.frutas}`, 6, 24, { tam: 7, cor: '#ffe9b0' });
       },
