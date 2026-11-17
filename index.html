@@ -526,31 +526,59 @@
   };
 
   // ---------- Gatos ----------
-  J.criarGato = (nome, atraso) => ({ nome, atraso, x: 0, y: 0, w: 14, h: 9, olhandoDireita: true, andando: false });
+  // `lag` = quantos passos do rastro o gato está atrás da Vic (normalmente igual ao `atraso`).
+  J.criarGato = (nome, atraso) => ({ nome, atraso, lag: atraso, x: 0, y: 0, w: 14, h: 9, olhandoDireita: true, andando: false });
 
   // Só registra quando a Vic se mexe: parada, os gatos param onde estão em vez de subir nela.
+  // Devolve true quando um passo novo entrou no rastro.
   J.registrarHistorico = function (historico, vic) {
     const ultimo = historico[historico.length - 1];
     const pes = vic.y + vic.h;
-    if (ultimo && Math.abs(ultimo.x - vic.x) < 0.01 && Math.abs(ultimo.pes - pes) < 0.01) return;
-    historico.push({ x: vic.x, pes, olhandoDireita: vic.olhandoDireita });
+    if (ultimo && Math.abs(ultimo.x - vic.x) < 0.01 && Math.abs(ultimo.pes - pes) < 0.01) return false;
+    historico.push({ x: vic.x, pes, olhandoDireita: vic.olhandoDireita, noChao: vic.noChao });
     if (historico.length > HISTORICO_MAX) historico.splice(0, historico.length - HISTORICO_MAX);
+    return true;
   };
 
   // Recria um rastro reto atrás da Vic (1 px por quadro), para os gatos reaparecerem atrás dela.
-  J.reiniciarHistorico = function (historico, vic) {
+  // Com a fase, o rastro para onde o chão acaba: os gatos não aparecem em cima de buraco ou água.
+  J.reiniciarHistorico = function (historico, vic, fase) {
     historico.length = 0;
+    historico.geracao = (historico.geracao || 0) + 1;
+    const T = J.TILE, pes = vic.y + vic.h, lin = Math.round(pes / T);
+    const temChao = (x) => {
+      if (!fase) return true;
+      for (let c = Math.floor(x / T); c <= Math.floor((x + vic.w - 0.01) / T); c++) if (fase.solido(c, lin)) return true;
+      return false;
+    };
     const sentido = vic.olhandoDireita ? -1 : 1;
+    const xs = [];
+    let x = vic.x;
+    for (let i = 0; i < HISTORICO_MAX; i++) {
+      const prox = vic.x + sentido * i;
+      if (temChao(prox)) x = prox; else break;
+      xs.push(x);
+    }
+    while (xs.length < HISTORICO_MAX) xs.push(x);
     for (let i = HISTORICO_MAX - 1; i >= 0; i--) {
-      historico.push({ x: vic.x + sentido * i, pes: vic.y + vic.h, olhandoDireita: vic.olhandoDireita });
+      historico.push({ x: xs[i], pes, olhandoDireita: vic.olhandoDireita, noChao: true });
     }
   };
 
-  J.atualizarGato = function (gato, historico, vic) {
+  J.atualizarGato = function (gato, historico, vic, avancou = true) {
     const antesX = gato.x;
-    const i = historico.length - 1 - gato.atraso;
-    if (i >= 0) {
-      const alvo = historico[i];
+    if (gato.geracao !== historico.geracao) { gato.geracao = historico.geracao; gato.lag = gato.atraso; }
+    const passo = (lag) => historico[historico.length - 1 - lag];
+    if (avancou) {
+      // A Vic voltou a andar: se o gato tinha chegado perto dela, ele espera ela abrir distância.
+      if (gato.lag < gato.atraso) gato.lag++;
+    } else if (gato.lag > 0 && passo(gato.lag) && passo(gato.lag).noChao === false) {
+      // A Vic parou, mas o gato ainda está no meio do salto dela: ele termina o salto
+      // (um passo por quadro, na mesma velocidade da Vic) até pousar onde ela pousou.
+      gato.lag--;
+    }
+    const alvo = passo(gato.lag);
+    if (alvo) {
       gato.x = alvo.x;
       gato.y = alvo.pes - gato.h;
       gato.olhandoDireita = alvo.olhandoDireita;
@@ -630,7 +658,7 @@
       tempo: 0, tempoFinal: 0, eventos: [],
     };
     jogo.chefona = jogo.oncas.find((o) => o.chefona) || null;
-    J.reiniciarHistorico(jogo.historico, vic);
+    J.reiniciarHistorico(jogo.historico, vic, fase);
     for (const g of jogo.gatos) J.atualizarGato(g, jogo.historico, vic);
     return jogo;
   };
@@ -639,7 +667,7 @@
     const v = jogo.vic;
     v.x = jogo.ultimaBandeira.x; v.y = jogo.ultimaBandeira.y;
     v.vx = 0; v.vy = 0; v.coracoes = 3; v.invencivel = INVENCIVEL;
-    J.reiniciarHistorico(jogo.historico, v);
+    J.reiniciarHistorico(jogo.historico, v, jogo.fase);
   };
 
   J.levarDano = function (jogo) {
@@ -656,7 +684,7 @@
     const v = jogo.vic;
     v.x = jogo.ultimoChaoSeguro.x; v.y = jogo.ultimoChaoSeguro.y;
     v.vx = 0; v.vy = 0; v.invencivel = INVENCIVEL;
-    J.reiniciarHistorico(jogo.historico, v);
+    J.reiniciarHistorico(jogo.historico, v, jogo.fase);
   }
 
   function chaoSeguroSob(fase, v) {
@@ -754,8 +782,8 @@
     if (v.noChao && chaoSeguroSob(jogo.fase, v)) jogo.ultimoChaoSeguro = { x: v.x, y: v.y };
     atualizarOncas(jogo, dt);
     coletarEMarcar(jogo);
-    J.registrarHistorico(jogo.historico, v);
-    for (const g of jogo.gatos) J.atualizarGato(g, jogo.historico, v);
+    const avancou = J.registrarHistorico(jogo.historico, v);
+    for (const g of jogo.gatos) J.atualizarGato(g, jogo.historico, v, avancou);
     miar(jogo, dt);
   };
 })(globalThis.Jogo = globalThis.Jogo || {});
