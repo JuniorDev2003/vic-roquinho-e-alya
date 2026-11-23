@@ -270,6 +270,57 @@
   };
   const BANDEIRA_ROXA_PALETA = { ...BANDEIRA_PALETA, F: '#9b4dff', Y: '#ffffff', T: '#e3c6ff' };
 
+  // ---------- Os 7 do show (só na Noite roxa) ----------
+  // Bonequinhos originais no estilo do jogo (12x20, como a Vic): cada um com cabelo, penteado
+  // e roupa de palco próprios. As pernas reaproveitam as da Vic, com calça comprida.
+  const CABECA_FRANJA = [
+    '...KKKKK....',
+    '..KHHHHHK...',
+    '.KHHHHHHHK..',
+    '.KHHHHHHHK..',
+    '.KHHHHHHSK..',
+    '.KHHSSSESK..',
+    '.KHSSSSSSK..',
+  ];
+  const CABECA_TESTA = [
+    '..KKKKKK....',
+    '.KHHHHHHK...',
+    '.KHHHHHHHK..',
+    '.KHHSSSSSK..',
+    '.KHSSSSSSK..',
+    '.KHSSSSESK..',
+    '.KHSSSSSSK..',
+  ];
+  const ROSTO_E_ROUPA = [
+    '..KSSSSMK...',
+    '...KSSSK....',
+    '..KCCACCK...',
+    '.KCCCACCCK..',
+    '.KCCCCACSK..',
+    '.KCCCCCCSK..',
+    '..KCCCCCK...',
+  ];
+  const calca = (pernas) => pernas.map((l) => l.replace(/[DS]/g, 'P'));
+  const membro = (cabeca, pernas, paleta) => ({ linhas: cabeca.concat(ROSTO_E_ROUPA, calca(pernas)), paleta });
+  const MEMBROS = [
+    // nome, penteado, cabelo, roupa, detalhe da roupa
+    ['RM', CABECA_TESTA, '#2b2b3a', '#4a6fa5', '#c9d8ef'],
+    ['Jin', CABECA_FRANJA, '#5a3b26', '#e05a8a', '#ffd1e0'],
+    ['Suga', CABECA_FRANJA, '#d9d4c8', '#2b2b2b', '#8e87a3'],
+    ['j-hope', CABECA_TESTA, '#e0a43a', '#ffd84d', '#ff8a3d'],
+    ['Jimin', CABECA_FRANJA, '#f2a7c3', '#fbfaf5', '#b56cff'],
+    ['V', CABECA_TESTA, '#3a2a1a', '#7a3fd1', '#e3c6ff'],
+    ['Jungkook', CABECA_FRANJA, '#111018', '#d03a3a', '#1c1626'],
+  ];
+  const SPRITES_MEMBROS = {};
+  for (const [nome, cabeca, cabelo, roupa, detalhe] of MEMBROS) {
+    const paleta = { K: '#1c1626', H: cabelo, S: '#f1c6a0', E: '#2b1d14', M: '#d98080', C: roupa, A: detalhe, P: '#24203a', B: '#0b0910' };
+    SPRITES_MEMBROS[nome] = {
+      parado: membro(cabeca, VIC_PARADO, paleta),
+      andando: [membro(cabeca, VIC_PASSO, paleta), membro(cabeca, VIC_JUNTA, paleta)],
+    };
+  }
+
   J.sprites = {
     vic: {
       parado: vic(VIC_PARADO),
@@ -292,6 +343,7 @@
     fruta: FRUTA,
     bandeira: { abaixada: BANDEIRA_ABAIXADA, erguida: BANDEIRA_ERGUIDA },
     drone: { andando: [drone(HELICE_A), drone(HELICE_B)], fugindo: drone(HELICE_A) },
+    membros: SPRITES_MEMBROS,
     lightstick: LIGHTSTICK,
     ingresso: INGRESSO,
     bandeiraRoxa: {
@@ -522,8 +574,12 @@
   const amazonia = construirMapa(roteiroAmazonia);
   const noite = construirMapa(roteiroNoite);
   J.FASES = {
-    amazonia: { id: 'amazonia', nome: 'Amazônia', ...amazonia, musica: 'musica.mp3', vilaoVoa: false },
-    noite: { id: 'noite', nome: 'Noite roxa', ...noite, musica: 'musica2.mp3', vilaoVoa: true },
+    // seguidores: [nome, atraso em quadros, sprite]. Na Amazônia, os gatinhos (que miam);
+    // na Noite roxa, os 7 do show em fila atrás da Vic.
+    amazonia: { id: 'amazonia', nome: 'Amazônia', ...amazonia, musica: 'musica.mp3', vilaoVoa: false, miam: true,
+      seguidores: [['Roquinho', 14, 'roquinho'], ['Alya', 28, 'alya']] },
+    noite: { id: 'noite', nome: 'Noite roxa', ...noite, musica: 'musica2.mp3', vilaoVoa: true, miam: false,
+      seguidores: ['RM', 'Jin', 'Suga', 'j-hope', 'Jimin', 'V', 'Jungkook'].map((n, i) => [n, 12 * (i + 1), 'membro']) },
   };
   J.ORDEM_FASES = ['amazonia', 'noite'];
   J.MAPA_FASE = amazonia.mapa;
@@ -568,7 +624,7 @@
 
 // ==== entidades.js ====
 (function (J) {
-  const HISTORICO_MAX = 60;
+  const HISTORICO_MAX = 100; // dá para 7 seguidores em fila na Noite roxa
   const DIST_REAPARECER = 160;
 
   // ---------- Vic ----------
@@ -601,7 +657,12 @@
 
   // ---------- Gatos ----------
   // `lag` = quantos passos do rastro o gato está atrás da Vic (normalmente igual ao `atraso`).
-  J.criarGato = (nome, atraso) => ({ nome, atraso, lag: atraso, x: 0, y: 0, w: 14, h: 9, olhandoDireita: true, andando: false });
+  // Serve para os gatinhos e para os 7 do show: `sprite` diz qual desenho usar
+  // ('membro' tem o tamanho da Vic, 10x20; os gatos são 14x9).
+  J.criarGato = (nome, atraso, sprite = nome.toLowerCase()) => {
+    const pessoa = sprite === 'membro';
+    return { nome, atraso, sprite, lag: atraso, x: 0, y: 0, w: pessoa ? 10 : 14, h: pessoa ? 20 : 9, olhandoDireita: true, andando: false };
+  };
 
   // Só registra quando a Vic se mexe: parada, os gatos param onde estão em vez de subir nela.
   // Devolve true quando um passo novo entrou no rastro.
@@ -728,7 +789,8 @@
     const vic = J.criarVic(inicio.x, inicio.y);
     const jogo = {
       tela: 'inicio', faseId, mapa, fase, vic, escolha: 0,
-      gatos: [J.criarGato('Roquinho', 14), J.criarGato('Alya', 28)],
+      gatos: def.seguidores.map(([nome, atraso, sprite]) => J.criarGato(nome, atraso, sprite)),
+      miam: def.miam,
       oncas: fase.oncas.map((o) => J.criarOnca(o.x, o.y, o.chefona, def.vilaoVoa)),
       historico: [],
       oncasEspantadas: 0, frutas: 0,
@@ -832,6 +894,7 @@
   }
 
   function miar(jogo, dt) {
+    if (!jogo.miam) return; // só os gatinhos miam
     jogo.proximoMiado -= dt;
     if (jogo.proximoMiado > 0) return;
     jogo.eventos.push(`miau:${jogo.gatos[jogo.proximoGato].nome}`);
@@ -1447,7 +1510,7 @@
     }
 
     function desenharGato(gato, camX, tempo) {
-      const S = J.sprites[gato.nome === 'Roquinho' ? 'roquinho' : 'alya'];
+      const S = gato.sprite === 'membro' ? J.sprites.membros[gato.nome] : J.sprites[gato.sprite];
       const sp = gato.andando ? S.andando[Math.floor(tempo * 8) % 2] : S.parado;
       J.desenharSprite(g, sp, gato.x - camX, gato.y, { espelhar: !gato.olhandoDireita });
     }
@@ -1503,7 +1566,7 @@
       const v = jogo.vic;
       const lista = [
         { t: 'Vic', cx: v.x + v.w / 2, y: v.y - 8, cor: '#ffe07a' },
-        ...jogo.gatos.map((g) => ({ t: g.nome, cx: g.x + g.w / 2, y: g.y - 8, cor: '#ffffff' })),
+        ...jogo.gatos.map((g) => ({ t: g.nome, cx: g.x + g.w / 2, y: g.y - 8, cor: g.sprite === 'membro' ? '#e3c6ff' : '#ffffff' })),
       ];
       tela.font = `bold ${Math.round(NOMES_TAM * escala)}px ${FONTE}`;
       const postos = [];
@@ -1610,13 +1673,21 @@
         const cx = (i * 47 + t * 20 * (1 + (i % 3))) % LARG, cy = (i * 31 + t * 40 * (1 + (i % 2))) % 140;
         g.fillStyle = LUZES[i % 4]; g.fillRect(Math.round(cx), Math.round(cy) + 50, 2, 2);
       }
-      J.desenharSprite(g, J.sprites.roquinho.parado, 126, 165);
-      J.desenharSprite(g, J.sprites.vic.parado, 154, 152);
-      J.desenharSprite(g, J.sprites.alya.parado, 178, 165, { espelhar: true });
-      J.desenharSprite(g, J.sprites.lightstick, 168, 140 - Math.round(Math.abs(Math.sin(t * 4)) * 4));
-      J.desenharSprite(g, J.sprites.coracao.cheio, 146, 140 - Math.abs(Math.sin(t * 3.3)) * 4);
+      // os 7 em cima do palco, dançando (cada um no seu tempo), e a Vic na frente
+      const nomesPalco = Object.keys(J.sprites.membros);
+      const posPalco = nomesPalco.map((nome, i) => {
+        const x = 104 + i * 16, pulo = Math.round(Math.abs(Math.sin(t * 5 + i * 0.9)) * 3);
+        const S = J.sprites.membros[nome];
+        J.desenharSprite(g, Math.floor(t * 4 + i) % 3 === 0 ? S.andando[0] : S.parado, x, 104 - pulo, { espelhar: i >= 4 });
+        return { nome, cx: x + 6, y: i % 2 ? 90 : 84 };
+      });
+      J.desenharSprite(g, J.sprites.vic.parado, 154, 156);
+      J.desenharSprite(g, J.sprites.lightstick, 168, 146 - Math.round(Math.abs(Math.sin(t * 4)) * 4));
+      J.desenharSprite(g, J.sprites.coracao.cheio, 144, 146 - Math.abs(Math.sin(t * 3.3)) * 4);
       g.fillStyle = '#00000059'; g.fillRect(0, 2, LARG, 50);
       blit();
+      for (const p of posPalco) texto(p.nome, p.cx, p.y, { tam: 5, cor: '#e3c6ff', alinhar: 'center', sombra: '#000000cc' });
+      texto('Vic', 160, 178, { tam: 6, cor: '#ffe07a', alinhar: 'center', sombra: '#000000cc' });
       texto('Parabéns, Vic! Você chegou ao palco!', 160, 9, { tam: 10, cor: '#e3c6ff', alinhar: 'center', sombra: '#3a1050' });
       texto(`Drones espantados: ${jogo.oncasEspantadas}      Lightsticks: ${jogo.frutas}`, 160, 28, { tam: 8, alinhar: 'center' });
       if (jogo.tempoFinal >= J.ESPERA_FINAL) texto(J.modoToque ? 'Toque na tela para escolher a fase' : 'Aperte ↑ para escolher a fase', 160, 40, { tam: 7, cor: '#e8e8e8', alinhar: 'center' });
