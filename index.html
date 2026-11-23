@@ -241,6 +241,35 @@
   };
   const CORACAO = ['.CC.CC.', 'CLCCCCC', 'CCCCCCC', '.CCCCC.', '..CCC..', '...C...'];
 
+  // ---------- Noite roxa ----------
+  // Drone de câmera (20x12), mesmo tamanho da onça. A hélice alterna entre aberta e borrada.
+  const DRONE_PALETA = { K: '#1c1626', G: '#8e87a3', H: '#c9c3db', L: '#3a3550', R: '#b56cff', M: '#c9c3db', P: '#ff4d6d' };
+  const DRONE_CORPO = [
+    '...K..........K.....',
+    '..KKKKKKKKKKKKKKK...',
+    '.KGGGGGGGGGGGGGGGK..',
+    '.KGHHHGGGGGGGGGGGK..',
+    '.KGGGGGGGGGGGGKKKKK.',
+    '.KGGGGGGGGGGGKLLLLK.',
+    '.KGGGGGGGGGGGKLRRLK.',
+    '..KKKKKKKKKKKKLLLLK.',
+    '..........P..KKKKK..',
+    '...K..........K.....',
+    '..KKK........KKK....',
+  ];
+  const drone = (helice) => ({ linhas: [helice].concat(DRONE_CORPO), paleta: DRONE_PALETA });
+  const HELICE_A = '.MMMMM......MMMMM...';
+  const HELICE_B = '...M..........M.....';
+  const LIGHTSTICK = {
+    linhas: ['..LL..', '.LPPL.', '.PWPP.', '.PPPP.', '..PP..', '..KK..', '..KK..', '..KK..'],
+    paleta: { L: '#e3c6ff', P: '#9b4dff', W: '#ffffff', K: '#2a2340' },
+  };
+  const INGRESSO = {
+    linhas: ['.......', 'TTTTTTT', 'TKTPTTT', '.TTPTT.', 'TKTPTTT', 'TTTTTTT'],
+    paleta: { T: '#ffd84d', K: '#c99a1a', P: '#9b4dff' },
+  };
+  const BANDEIRA_ROXA_PALETA = { ...BANDEIRA_PALETA, F: '#9b4dff', Y: '#ffffff', T: '#e3c6ff' };
+
   J.sprites = {
     vic: {
       parado: vic(VIC_PARADO),
@@ -262,6 +291,13 @@
     acai: ACAI,
     fruta: FRUTA,
     bandeira: { abaixada: BANDEIRA_ABAIXADA, erguida: BANDEIRA_ERGUIDA },
+    drone: { andando: [drone(HELICE_A), drone(HELICE_B)], fugindo: drone(HELICE_A) },
+    lightstick: LIGHTSTICK,
+    ingresso: INGRESSO,
+    bandeiraRoxa: {
+      abaixada: { linhas: BANDEIRA_ABAIXADA.linhas, paleta: BANDEIRA_ROXA_PALETA },
+      erguida: { linhas: BANDEIRA_ERGUIDA.linhas, paleta: BANDEIRA_ROXA_PALETA },
+    },
     coracao: {
       cheio: { linhas: CORACAO, paleta: { C: '#e05a6a', L: '#ffb3bd' } },
       vazio: { linhas: CORACAO, paleta: { C: '#5a3b3b', L: '#6e4a4a' } },
@@ -352,7 +388,8 @@
   const LINHAS = 12;
   const SOLIDOS = '#=T';
 
-  function construirMapa() {
+  // `roteiro(P, por, secao)` monta a fase com as peças abaixo; `secao(nome)` fecha uma área.
+  function construirMapa(roteiro) {
     const grade = Array.from({ length: LINHAS }, () => Array(1200).fill('.'));
     let c = 0;
     const secoes = [];
@@ -379,6 +416,14 @@
         P.plano(3, { topo: 9, cada: 2 });
         P.plano(3, { item: 'f', topo: 8, cada: 2 });
         P.plano(3, { topo: 9, cada: 2 });
+      },
+      arquibancada() {
+        // sobe três degraus, anda lá em cima e desce
+        P.plano(2, { topo: 9, item: null });
+        P.plano(2, { topo: 8, item: null });
+        P.plano(5, { topo: 7, item: 'f', cada: 2 });
+        P.plano(2, { topo: 8, item: null });
+        P.plano(2, { topo: 9, item: null });
       },
       buraco(w = 3) {
         P.plano(2, { item: null });
@@ -428,37 +473,66 @@
       },
     };
 
-    // Versão curta (~metade da original): cada área mantém o seu desafio principal.
-    // ---- Mata ----
-    P.plano(8, { item: null }); por(3, 9, 'S');
-    P.plano(6); P.tronco(1); P.degraus(); P.onca(); P.buraco(2);
-    P.galho(); P.tronco(2); P.bandeira(); P.plano(4);
-    secoes.push({ ate: c, nome: 'mata' });
-
-    // ---- Rio ----
-    P.plano(6); P.rio(20); P.plano(8); P.onca(); P.plano(6); P.rio(15); P.plano(8);
-    P.bandeira(); P.plano(6);
-    secoes.push({ ate: c, nome: 'rio' });
-
-    // ---- Árvores gigantes e a chefona ----
-    P.degraus(); P.galho(); P.onca(); P.tronco(2); P.buraco(3); P.plano(6); P.chefona();
-    secoes.push({ ate: c, nome: 'gigantes' });
-
-    // ---- Jardim Botânico ----
-    P.estufa();
-    secoes.push({ ate: c, nome: 'jardim' });
-
+    roteiro(P, por, (nome) => secoes.push({ ate: c, nome }));
     return { mapa: grade.map((l) => l.slice(0, c).join('')), secoes };
   }
 
-  const construido = construirMapa();
-  J.MAPA_FASE = construido.mapa;
-  J.SECOES = construido.secoes;
+  // ---------- Fase 1: Amazônia ----------
+  // Versão curta (~metade da original): cada área mantém o seu desafio principal.
+  function roteiroAmazonia(P, por, secao) {
+    // Mata
+    P.plano(8, { item: null }); por(3, 9, 'S');
+    P.plano(6); P.tronco(1); P.degraus(); P.onca(); P.buraco(2);
+    P.galho(); P.tronco(2); P.bandeira(); P.plano(4);
+    secao('mata');
+    // Rio
+    P.plano(6); P.rio(20); P.plano(8); P.onca(); P.plano(6); P.rio(15); P.plano(8);
+    P.bandeira(); P.plano(6);
+    secao('rio');
+    // Árvores gigantes e a chefona
+    P.degraus(); P.galho(); P.onca(); P.tronco(2); P.buraco(3); P.plano(6); P.chefona();
+    secao('gigantes');
+    // Jardim Botânico
+    P.estufa();
+    secao('jardim');
+  }
 
-  J.secaoEm = function (xPixel) {
+  // ---------- Fase 2: Noite roxa ----------
+  // Mesmas peças, com outra cara: '#' piso da arena, '=' passarela de treliça,
+  // 'T' caixa de som, '~' fosso de fumaça, 'o' drone, 'O' drone gigante, 'E' palco.
+  function roteiroNoite(P, por, secao) {
+    // Entrada da arena
+    P.plano(8, { item: null }); por(3, 9, 'S');
+    P.plano(6); P.tronco(1); P.arquibancada(); P.onca(); P.buraco(2);
+    P.galho(); P.bandeira(); P.plano(4);
+    secao('entrada');
+    // Pista, com fossos de fumaça e passarelas
+    P.plano(6); P.rio(15); P.plano(6); P.onca(); P.tronco(2); P.plano(4); P.rio(20); P.plano(6);
+    P.bandeira(); P.plano(4);
+    secao('pista');
+    // Arquibancadas e o drone gigante
+    P.arquibancada(); P.galho(); P.onca(); P.buraco(3); P.plano(6); P.chefona();
+    secao('arena');
+    // Chegada no palco
+    P.estufa();
+    secao('palco');
+  }
+
+  // Cada fase: nome, mapa, áreas, música e se o vilão voa.
+  const amazonia = construirMapa(roteiroAmazonia);
+  const noite = construirMapa(roteiroNoite);
+  J.FASES = {
+    amazonia: { id: 'amazonia', nome: 'Amazônia', ...amazonia, musica: 'musica.mp3', vilaoVoa: false },
+    noite: { id: 'noite', nome: 'Noite roxa', ...noite, musica: 'musica2.mp3', vilaoVoa: true },
+  };
+  J.ORDEM_FASES = ['amazonia', 'noite'];
+  J.MAPA_FASE = amazonia.mapa;
+  J.SECOES = amazonia.secoes;
+
+  J.secaoEm = function (xPixel, secoes = J.SECOES) {
     const col = Math.floor(xPixel / J.TILE);
-    const s = J.SECOES.find((sec) => col < sec.ate);
-    return (s || J.SECOES[J.SECOES.length - 1]).nome;
+    const s = secoes.find((sec) => col < sec.ate);
+    return (s || secoes[secoes.length - 1]).nome;
   };
 
   J.carregarFase = function (linhas) {
@@ -592,11 +666,12 @@
   };
 
   // ---------- Onças ----------
-  J.criarOnca = function (x, y, chefona) {
+  // `voa`: na Noite roxa o vilão é um drone, que foge voando para cima em vez de correr.
+  J.criarOnca = function (x, y, chefona, voa = false) {
     const w = chefona ? 40 : 20, h = chefona ? 24 : 12;
     return {
       x, y: y + J.TILE - h, w, h, vx: chefona ? -20 : -30, vy: 0, estado: 'andando',
-      vidas: chefona ? 3 : 1, chefona, invencivel: 0, origemX: x, inicioFuga: null, animTempo: 0,
+      vidas: chefona ? 3 : 1, chefona, voa, invencivel: 0, origemX: x, inicioFuga: null, animTempo: 0,
     };
   };
 
@@ -616,6 +691,7 @@
         onca.vx = (onca.x + onca.w / 2 >= vic.x + vic.w / 2 ? 1 : -1) * 180;
       }
       onca.x += onca.vx * dt;
+      if (onca.voa) onca.y -= 140 * dt;
       if (Math.abs(onca.x - onca.inicioFuga) > 240) onca.estado = 'foi';
       return;
     }
@@ -643,14 +719,17 @@
   // Converte a posição de um tile (canto superior esquerdo) na posição da Vic em pé nele.
   const emPeNoTile = (p) => ({ x: p.x + 3, y: p.y + J.TILE - 20 });
 
-  J.criarJogo = function ({ mapa = J.MAPA_FASE, aleatorio = Math.random } = {}) {
+  J.criarJogo = function ({ faseId = 'amazonia', mapa, aleatorio = Math.random } = {}) {
+    const def = J.FASES[faseId];
+    mapa = mapa || def.mapa;
     const fase = J.carregarFase(mapa);
+    fase.secoes = def.secoes;
     const inicio = emPeNoTile(fase.inicio);
     const vic = J.criarVic(inicio.x, inicio.y);
     const jogo = {
-      tela: 'inicio', mapa, fase, vic,
+      tela: 'inicio', faseId, mapa, fase, vic, escolha: 0,
       gatos: [J.criarGato('Roquinho', 14), J.criarGato('Alya', 28)],
-      oncas: fase.oncas.map((o) => J.criarOnca(o.x, o.y, o.chefona)),
+      oncas: fase.oncas.map((o) => J.criarOnca(o.x, o.y, o.chefona, def.vilaoVoa)),
       historico: [],
       oncasEspantadas: 0, frutas: 0,
       ultimaBandeira: { ...inicio }, ultimoChaoSeguro: { ...inicio },
@@ -760,17 +839,49 @@
     jogo.proximoMiado = 10 + jogo.aleatorio() * 10;
   }
 
+  // ---------- Tela de escolha de fase ----------
+  // Os cartões ficam aqui (e não no desenho) porque o toque precisa saber onde cada um está.
+  J.CARTOES = [{ x: 26, y: 40, w: 126, h: 112 }, { x: 168, y: 40, w: 126, h: 112 }];
+  J.cartaoEm = function (x, y) {
+    const i = J.CARTOES.findIndex((c) => x >= c.x && x <= c.x + c.w && y >= c.y && y <= c.y + c.h);
+    return i >= 0 ? i : null;
+  };
+
+  function iniciarFase(jogo, indice) {
+    const faseId = J.ORDEM_FASES[indice];
+    Object.assign(jogo, J.criarJogo({ faseId, aleatorio: jogo.aleatorio }), { tela: 'jogando', escolha: indice });
+    jogo.eventos = ['bandeira']; // um "plim" para avisar que começou
+  }
+
+  function atualizarEscolha(jogo, entrada) {
+    const n = J.ORDEM_FASES.length;
+    if (entrada.esquerdaApertado) { jogo.escolha = (jogo.escolha + n - 1) % n; jogo.eventos.push('fruta'); }
+    if (entrada.direitaApertado) { jogo.escolha = (jogo.escolha + 1) % n; jogo.eventos.push('fruta'); }
+    if (entrada.toque) {
+      const i = J.cartaoEm(entrada.toque.x, entrada.toque.y);
+      if (i !== null) return iniciarFase(jogo, i);
+    }
+    if (entrada.puloApertado || entrada.confirmar) iniciarFase(jogo, jogo.escolha);
+  }
+
   J.atualizarJogo = function (jogo, entrada, dt) {
     jogo.eventos = [];
     dt = Math.min(dt, J.DT_MAX);
     if (jogo.tela === 'inicio') {
-      if (entrada.qualquerTecla) jogo.tela = 'jogando';
+      if (entrada.qualquerTecla) jogo.tela = 'escolha';
+      return;
+    }
+    if (jogo.tela === 'escolha') {
+      atualizarEscolha(jogo, entrada);
       return;
     }
     if (jogo.tela === 'final') {
       jogo.tempoFinal += dt;
-      if ((entrada.puloApertado || entrada.toqueTela) && jogo.tempoFinal >= J.ESPERA_FINAL) {
-        Object.assign(jogo, J.criarJogo({ mapa: jogo.mapa, aleatorio: jogo.aleatorio }), { tela: 'jogando' });
+      if ((entrada.puloApertado || entrada.toqueTela || entrada.confirmar) && jogo.tempoFinal >= J.ESPERA_FINAL) {
+        // volta para a escolha, já apontando para a próxima fase
+        const atual = J.ORDEM_FASES.indexOf(jogo.faseId);
+        jogo.tela = 'escolha';
+        jogo.escolha = (atual + 1) % J.ORDEM_FASES.length;
       }
       return;
     }
@@ -794,7 +905,12 @@
 
   J.criarEntrada = function (alvo) {
     const seguradas = { esquerda: false, direita: false };
-    const bordas = { puloApertado: false, qualquerTecla: false, alternarSom: false, toqueTela: false };
+    // "bordas" valem só no quadro em que aconteceram (apertou agora), ao contrário das "seguradas".
+    const NOVAS_BORDAS = () => ({
+      puloApertado: false, qualquerTecla: false, alternarSom: false, toqueTela: false,
+      esquerdaApertado: false, direitaApertado: false, confirmar: false, toque: null,
+    });
+    let bordas = NOVAS_BORDAS();
     const toques = new Map(); // dedo (pointerId) no direcional -> 'esquerda' | 'direita'
     const tocando = (lado) => { for (const l of toques.values()) if (l === lado) return true; return false; };
 
@@ -805,6 +921,9 @@
       if (e.repeat) return;
       bordas.qualquerTecla = true;
       if (e.key === 'ArrowUp') bordas.puloApertado = true;
+      if (e.key === 'ArrowLeft') bordas.esquerdaApertado = true;
+      if (e.key === 'ArrowRight') bordas.direitaApertado = true;
+      if (e.key === 'Enter' || e.key === ' ') bordas.confirmar = true;
       if (e.key === 'm' || e.key === 'M') bordas.alternarSom = true;
     });
     alvo.addEventListener('keyup', (e) => {
@@ -824,13 +943,14 @@
           esquerda: seguradas.esquerda || tocando('esquerda'),
           direita: seguradas.direita || tocando('direita'),
         };
-        bordas.puloApertado = false; bordas.qualquerTecla = false; bordas.alternarSom = false; bordas.toqueTela = false;
+        bordas = NOVAS_BORDAS();
         return r;
       },
 
       // Controles de toque: direcional (◀ ▶) e botão de pulo.
       // O direcional acompanha o dedo: dá para deslizar de ◀ para ▶ sem soltar.
-      ligarToque({ dpad, pular, ignorar }) {
+      // `tela` (o canvas) serve para saber em que ponto do jogo o dedo tocou (cartões de fase).
+      ligarToque({ dpad, pular, ignorar, tela }) {
         const lado = (e) => {
           const r = dpad.getBoundingClientRect();
           return e.clientX < r.left + r.width / 2 ? 'esquerda' : 'direita';
@@ -840,6 +960,7 @@
           e.preventDefault();
           try { dpad.setPointerCapture(e.pointerId); } catch (_) { /* ok */ }
           toques.set(e.pointerId, lado(e));
+          if (lado(e) === 'esquerda') bordas.esquerdaApertado = true; else bordas.direitaApertado = true;
           marcar();
         });
         dpad.addEventListener('pointermove', (e) => {
@@ -861,6 +982,10 @@
           if (ignorar && e.target.closest && e.target.closest(ignorar)) return;
           bordas.qualquerTecla = true;
           bordas.toqueTela = true;
+          if (tela && e.target === tela) {
+            const r = tela.getBoundingClientRect();
+            bordas.toque = { x: ((e.clientX - r.left) / r.width) * 320, y: ((e.clientY - r.top) / r.height) * 192 };
+          }
         });
         alvo.addEventListener('contextmenu', (e) => e.preventDefault());
       },
@@ -872,46 +997,61 @@
 (function (J) {
   // Sons sintetizados com Web Audio: nada é baixado, tudo nasce aqui.
   const VOLUME = 0.15;
-  const BPM = 132;
-  const COLCHEIA = 60 / BPM / 2;
-  // Melodia alegre (semitons a partir de Dó 5; null = pausa) e baixo (a partir de Dó 3).
-  const MELODIA = [0, 4, 7, 9, 7, 4, 2, null, 2, 5, 9, 11, 9, 5, 4, null,
-    0, 4, 7, 12, 11, 9, 7, null, 5, 4, 2, 4, 0, null, null, null];
-  const BAIXO = [0, 0, 7, 7, 5, 5, 7, 7];
   const freq = (base, semitons) => base * Math.pow(2, semitons / 12);
+  // Musiquinhas sintetizadas de cada fase (semitons a partir de Dó 5; null = pausa; baixo a partir de Dó 3).
+  const MUSICAS = {
+    amazonia: {
+      bpm: 132, timbre: 'square', bumbo: false,
+      melodia: [0, 4, 7, 9, 7, 4, 2, null, 2, 5, 9, 11, 9, 5, 4, null,
+        0, 4, 7, 12, 11, 9, 7, null, 5, 4, 2, 4, 0, null, null, null],
+      baixo: [0, 0, 7, 7, 5, 5, 7, 7],
+    },
+    noite: { // pop dançante, com bumbo marcando o ritmo
+      bpm: 120, timbre: 'sawtooth', bumbo: true,
+      melodia: [7, null, 7, 10, 12, null, 10, 7, 5, null, 3, 5, 7, null, null, null,
+        7, null, 7, 10, 12, 15, 14, 12, 10, null, 12, 10, 7, null, null, null],
+      baixo: [-4, -4, -2, -2, 0, 0, -5, -5],
+    },
+  };
 
   // ---------- Música de fundo em arquivo ----------
-  // Coloque um arquivo com este nome na MESMA pasta do jogo e ele toca em loop durante a partida.
+  // Coloque na MESMA pasta do jogo um arquivo com o nome da fase (musica.mp3 na Amazônia,
+  // musica2.mp3 na Noite roxa) e ele toca em loop durante a partida.
   // Se o arquivo não existir (ou não carregar), o jogo usa a musiquinha sintetizada acima.
-  const MUSICA_ARQUIVO = 'musica.mp3';
   const MUSICA_VOLUME = 0.35; // de 0 (mudo) a 1 (máximo). No iPhone o volume é sempre o do aparelho.
 
-  function criarMusicaArquivo() {
-    if (typeof Audio === 'undefined') return null;
+  function criarMusicaArquivo(src) {
+    if (typeof Audio === 'undefined' || !src) return null;
     const el = new Audio();
     const m = { el, ok: true, liberada: false };
     el.loop = true;
     el.preload = 'auto';
     el.volume = MUSICA_VOLUME;
     el.addEventListener('error', () => { m.ok = false; }); // sem arquivo: volta para a sintetizada
-    el.src = MUSICA_ARQUIVO;
+    el.src = src;
     return m;
   }
 
   J.criarAudio = function () {
     let ctx = null, mestre = null, ligado = true;
-    let passoMusica = 0, proximoTempo = 0, tocandoMusica = false;
-    const arquivo = criarMusicaArquivo();
+    let passoMusica = 0, proximoTempo = 0, tocandoMusica = false, faseTocando = null;
+    const arquivos = {};
+    for (const id of J.ORDEM_FASES || []) arquivos[id] = criarMusicaArquivo(J.FASES[id].musica);
+    const todos = () => Object.values(arquivos).filter(Boolean);
     let paginaVisivel = true;
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => {
         paginaVisivel = !document.hidden;
-        if (!paginaVisivel && arquivo) arquivo.el.pause(); // não toca com o celular bloqueado ou em outra aba
+        if (!paginaVisivel) todos().forEach((a) => a.el.pause()); // não toca com o celular bloqueado ou em outra aba
       });
     }
 
-    // Toca/pausa o MP3. Devolve true se é ele quem está cuidando da música.
-    function musicaDeArquivo(deveTocar) {
+    // Toca/pausa o MP3 da fase. Devolve true se é ele quem está cuidando da música.
+    function musicaDeArquivo(deveTocar, faseId) {
+      for (const [id, a] of Object.entries(arquivos)) {
+        if (a && id !== faseId && !a.el.paused) a.el.pause();
+      }
+      const arquivo = arquivos[faseId];
       if (!arquivo || !arquivo.ok) return false;
       if (deveTocar && paginaVisivel) {
         if (arquivo.el.paused && arquivo.liberada) arquivo.el.play().catch(() => {});
@@ -922,11 +1062,13 @@
     }
 
     function destravar() {
-      // Celulares só deixam tocar áudio depois de um toque: "liberamos" o MP3 aqui, dentro do toque.
-      if (arquivo && arquivo.ok && !arquivo.liberada) {
+      // Celulares só deixam tocar áudio depois de um toque: "liberamos" os MP3 aqui, dentro do toque.
+      for (const [id, arquivo] of Object.entries(arquivos)) {
+        if (!arquivo || !arquivo.ok || arquivo.liberada) continue;
         arquivo.el.play().then(() => {
           arquivo.liberada = true;
-          if (!(ligado && J.jogoAtual && J.jogoAtual.tela === 'jogando')) arquivo.el.pause();
+          const j = J.jogoAtual;
+          if (!(ligado && j && j.tela === 'jogando' && j.faseId === id)) arquivo.el.pause();
         }).catch(() => {});
       }
       const AC = globalThis.AudioContext || globalThis.webkitAudioContext;
@@ -999,22 +1141,28 @@
     }
 
     // Toca a música adiantada em pequenos blocos (agendamento com folga).
-    function atualizarMusica(tela) {
+    function atualizarMusica(tela, faseId = 'amazonia') {
       const deveTocar = ligado && tela === 'jogando';
-      if (musicaDeArquivo(deveTocar)) return; // o MP3 está cuidando da música
+      if (musicaDeArquivo(deveTocar, faseId)) return; // o MP3 está cuidando da música
       if (!ctx || ctx.state !== 'running') return;
       if (!deveTocar) { tocandoMusica = false; return; }
-      if (!tocandoMusica) { tocandoMusica = true; proximoTempo = ctx.currentTime + 0.05; passoMusica = 0; }
+      if (!tocandoMusica || faseTocando !== faseId) {
+        tocandoMusica = true; faseTocando = faseId; proximoTempo = ctx.currentTime + 0.05; passoMusica = 0;
+      }
+      const mus = MUSICAS[faseId] || MUSICAS.amazonia;
+      const colcheia = 60 / mus.bpm / 2;
       // Depois de uma aba escondida, retoma do agora em vez de tocar tudo o que ficou para trás.
       if (proximoTempo < ctx.currentTime) proximoTempo = ctx.currentTime + 0.05;
       while (proximoTempo < ctx.currentTime + 0.2) {
-        const m = MELODIA[passoMusica % MELODIA.length];
-        if (m !== null) nota(freq(523.25, m), proximoTempo, COLCHEIA * 0.9, { tipo: 'square', vol: 0.12 });
+        const m = mus.melodia[passoMusica % mus.melodia.length];
+        if (m !== null) nota(freq(523.25, m), proximoTempo, colcheia * 0.9, { tipo: mus.timbre, vol: mus.timbre === 'sawtooth' ? 0.07 : 0.12 });
         if (passoMusica % 2 === 0) {
-          const b = BAIXO[(passoMusica / 2) % BAIXO.length];
-          nota(freq(130.81, b), proximoTempo, COLCHEIA * 1.8, { tipo: 'triangle', vol: 0.25 });
+          const b = mus.baixo[(passoMusica / 2) % mus.baixo.length];
+          nota(freq(130.81, b), proximoTempo, colcheia * 1.8, { tipo: 'triangle', vol: 0.25 });
+          if (mus.bumbo) nota(150, proximoTempo, 0.12, { tipo: 'sine', vol: 0.5, fFim: 45 });
         }
-        proximoTempo += COLCHEIA;
+        if (mus.bumbo && passoMusica % 4 === 2) ruido(proximoTempo, 0.06, 0.08); // chimbal
+        proximoTempo += colcheia;
         passoMusica++;
       }
     }
@@ -1043,7 +1191,13 @@
     rio: { ceu: ['#cdeef2', '#b8e4e8', '#a3d8d8', '#92cdc6'], fundo: '#4a9a6a', frente: '#367f55', tronco: '#5e4128', grama: '#52b35a', tufo: '#3d9044' },
     gigantes: { ceu: ['#a9d9b8', '#93cca4', '#7fbf93', '#6fb385'], fundo: '#2c6e45', frente: '#215a37', tronco: '#4a3220', grama: '#43a04a', tufo: '#357f3b', cipo: true },
     jardim: { ceu: ['#ffd9a8', '#fbcf9e', '#f6c696', '#f0bd90'], fundo: '#6fae6a', frente: '#4f9a52', tronco: '#6b4a2b', grama: '#79c26a', tufo: '#5aa85a', jardim: true },
+    // Noite roxa: `grama` vira a faixa de luz na beirada do piso.
+    entrada: { noite: true, ceu: ['#140c24', '#1a0f2e', '#211338', '#281742'], terra: '#2a2340', pinta: '#231d36', grama: '#b56cff', tufo: '#7a3fd1', plateia: '#1a1028' },
+    pista: { noite: true, ceu: ['#0f0c26', '#141033', '#1a1440', '#21184d'], terra: '#252040', pinta: '#1e1a36', grama: '#6c8cff', tufo: '#4a5fd1', plateia: '#141028' },
+    arena: { noite: true, ceu: ['#1a0820', '#22092b', '#2b0b36', '#350e42'], terra: '#2d1f3d', pinta: '#251933', grama: '#ff6ad5', tufo: '#c13fa8', plateia: '#1c0a22' },
+    palco: { noite: true, ceu: ['#2a0f3a', '#341447', '#3e1a54', '#482061'], terra: '#2a2340', pinta: '#231d36', grama: '#ffd84d', tufo: '#c99a1a', plateia: '#22102e' },
   };
+  const LUZES = ['#ffd84d', '#ff6ad5', '#6c8cff', '#b56cff'];
 
   // Gerador pseudoaleatório determinístico (o cenário é sempre o mesmo).
   function semente(n) { let s = n; return () => { s = (s * 16807) % 2147483647; return s / 2147483647; }; }
@@ -1103,12 +1257,35 @@
     return c;
   }
 
+  // Palco da Noite roxa (61x47), no mesmo lugar e tamanho da estufa.
+  function criarPalco() {
+    const c = document.createElement('canvas');
+    c.width = 61; c.height = 47;
+    const g = c.getContext('2d');
+    g.fillStyle = '#3a3550'; // treliça: duas colunas e a barra de cima
+    g.fillRect(1, 2, 3, 33); g.fillRect(57, 2, 3, 33); g.fillRect(1, 2, 59, 3);
+    g.fillStyle = '#8e87a3';
+    for (let y = 6; y < 35; y += 4) { g.fillRect(2, y, 1, 2); g.fillRect(58, y, 1, 2); }
+    LUZES.forEach((cor, i) => { g.fillStyle = cor; g.fillRect(8 + i * 13, 5, 4, 2); });
+    g.fillStyle = '#1c1626'; g.fillRect(10, 9, 41, 23); // telão
+    g.fillStyle = '#2a1840'; g.fillRect(11, 10, 39, 21);
+    const coracao = ['.CC.CC.', 'CCCCCCC', 'CCCCCCC', '.CCCCC.', '..CCC..', '...C...'];
+    coracao.forEach((l, r) => { for (let k = 0; k < l.length; k++) if (l[k] === 'C') { g.fillStyle = '#b56cff'; g.fillRect(20 + k * 3, 12 + r * 3, 3, 3); } });
+    g.fillStyle = '#2a2340'; g.fillRect(0, 35, 61, 12); // tablado
+    g.fillStyle = '#b56cff'; g.fillRect(0, 35, 61, 2);
+    for (let x = 2; x < 61; x += 6) { g.fillStyle = LUZES[(x / 6) % 4 | 0]; g.fillRect(x, 40, 2, 2); }
+    g.fillStyle = '#141018'; g.fillRect(4, 27, 7, 8); g.fillRect(50, 27, 7, 8); // caixas de som
+    g.fillStyle = '#4a4560'; g.fillRect(6, 29, 3, 3); g.fillRect(52, 29, 3, 3);
+    return c;
+  }
+
   J.criarRenderizador = function (canvas) {
     const tela = canvas.getContext('2d');
     const mundo = document.createElement('canvas');
     mundo.width = LARG; mundo.height = ALT;
     const g = mundo.getContext('2d');
     const estufa = criarEstufa();
+    const palco = criarPalco();
     let escala = 1;
 
     // A escala é inteira em pixels FÍSICOS da tela (devicePixelRatio): assim o pixel art
@@ -1139,7 +1316,37 @@
       g.fillStyle = cen.ceu[cen.ceu.length - 1]; g.fillRect(0, 40, LARG, ALT - 40);
     }
 
-    function fundo(cen, camX) {
+    // Arena à noite: holofotes balançando, treliça com luzes e a plateia com lightsticks.
+    const PLATEIA = (() => { const r = semente(23); return Array.from({ length: 30 }, () => ({ dy: Math.round(r() * 5), braco: r() < 0.55, fase: Math.floor(r() * 4) })); })();
+    function fundoNoite(cen, camX, t) {
+      ceu(cen);
+      for (let i = 0; i < 4; i++) {
+        const x0 = ((i * 110 - camX * 0.15) % (LARG + 120) + LARG + 120) % (LARG + 120) - 60;
+        const desvio = Math.tan(Math.sin(t * 0.8 + i * 1.7) * 0.5) * 150;
+        g.fillStyle = i % 2 ? 'rgba(181,108,255,0.12)' : 'rgba(255,243,196,0.09)';
+        g.beginPath(); g.moveTo(x0 - 2, 8); g.lineTo(x0 + 2, 8);
+        g.lineTo(x0 + desvio + 30, 160); g.lineTo(x0 + desvio - 30, 160); g.closePath(); g.fill();
+      }
+      g.fillStyle = '#3a3550'; g.fillRect(0, 5, LARG, 3);
+      for (let x = -((camX * 0.15) % 40); x < LARG; x += 40) {
+        const k = Math.floor((x + camX * 0.15) / 40 + t * 2);
+        g.fillStyle = LUZES[((k % 4) + 4) % 4]; g.fillRect(Math.round(x) + 18, 8, 4, 2);
+      }
+      const passo = 14, desloc = camX * 0.5;
+      for (let i = Math.floor(desloc / passo) - 1; i <= Math.floor((desloc + LARG) / passo) + 1; i++) {
+        const p = PLATEIA[((i % PLATEIA.length) + PLATEIA.length) % PLATEIA.length];
+        const x = Math.round(i * passo - desloc), y = 140 + p.dy;
+        g.fillStyle = cen.plateia; g.fillRect(x - 6, y + 4, 13, 160 - y); bolinha(g, x, y, 5, cen.plateia);
+        if (p.braco) {
+          const sobe = Math.floor(t * 3 + p.fase) % 2;
+          g.fillStyle = '#3a3550'; g.fillRect(x + 6, y - 12 - sobe, 2, 12);
+          g.fillStyle = Math.floor(t * 2 + p.fase) % 2 ? '#e3c6ff' : '#b56cff'; g.fillRect(x + 5, y - 16 - sobe, 4, 4);
+        }
+      }
+    }
+
+    function fundo(cen, camX, t = performance.now() / 1000) {
+      if (cen.noite) return fundoNoite(cen, camX, t);
       ceu(cen);
       desenharCamada(g, CAMADA_FUNDO, camX * 0.3, cen.fundo, null, false);
       if (cen.cipo) {
@@ -1156,10 +1363,11 @@
       const f = jogo.fase, T = J.TILE;
       const c0 = Math.floor(camX / T), c1 = c0 + Math.ceil(LARG / T) + 1;
       for (let c = c0; c <= c1; c++) {
-        const cen = CENARIOS[J.secaoEm(c * T)];
+        const cen = CENARIOS[J.secaoEm(c * T, f.secoes)];
         for (let l = 0; l < f.linhas; l++) {
           const ch = f.tile(c, l);
           const x = c * T - camX, y = l * T;
+          if (cen.noite) { tileNoite(f, ch, x, y, c, l, cen, tempo); continue; }
           if (ch === '#') {
             g.fillStyle = '#7a5532'; g.fillRect(x, y, T, T);
             g.fillStyle = '#6a4628'; g.fillRect(x + ((c * 7 + l * 3) % 12), y + ((c * 5 + l) % 12) + 2, 2, 2);
@@ -1196,6 +1404,41 @@
       }
     }
 
+    // Peças da Noite roxa: piso com faixa de luz, passarela de treliça, caixa de som e fosso de fumaça.
+    function tileNoite(f, ch, x, y, c, l, cen, tempo) {
+      const T = J.TILE;
+      if (ch === '#') {
+        g.fillStyle = cen.terra; g.fillRect(x, y, T, T);
+        g.fillStyle = cen.pinta; g.fillRect(x + ((c * 7 + l * 3) % 12), y + ((c * 5 + l) % 12) + 2, 2, 2);
+        if (f.tile(c, l - 1) !== '#') {
+          g.fillStyle = cen.grama; g.fillRect(x, y, T, 2);
+          g.fillStyle = cen.tufo; g.fillRect(x, y + 2, T, 1);
+          const pisca = Math.floor(tempo * 3 + c) % 2;
+          g.fillStyle = LUZES[(c + l) % 4]; g.fillRect(x + (pisca ? 3 : 11), y + 5, 2, 1);
+        }
+      } else if (ch === '=') {
+        g.fillStyle = '#1c1626'; g.fillRect(x, y, T, 7);
+        g.fillStyle = '#8e87a3'; g.fillRect(x, y + 1, T, 1); g.fillRect(x, y + 5, T, 1);
+        for (let i = 0; i < T; i++) g.fillRect(x + i, y + 2 + Math.abs((i % 6) - 3) * 0.67 | 0, 1, 1);
+        g.fillStyle = cen.grama; g.fillRect(x + ((c * 5) % 12), y, 2, 1);
+      } else if (ch === 'T') {
+        g.fillStyle = '#0b0910'; g.fillRect(x + 1, y, T - 2, T);
+        g.fillStyle = '#1c1626'; g.fillRect(x + 2, y + 1, T - 4, T - 2);
+        const batida = Math.floor(tempo * 4) % 2;
+        bolinha(g, x + 8, y + 8, 4 + batida, '#4a4560'); bolinha(g, x + 8, y + 8, 2, '#0b0910');
+      } else if (ch === '~') {
+        g.fillStyle = '#120a20'; g.fillRect(x, y, T, T);
+        if (f.tile(c, l - 1) !== '~') {
+          const onda = Math.floor(tempo * 4 + c) % 4;
+          g.fillStyle = '#5a2d8c'; g.fillRect(x, y, T, 3);
+          g.fillStyle = '#9b4dff'; g.fillRect(x + onda * 4, y + 3, 4, 2);
+          g.fillStyle = '#e3c6ff'; g.fillRect(x + ((onda * 4 + 9) % 14), y - 1, 2, 1);
+        } else {
+          g.fillStyle = '#1c1030'; g.fillRect(x + ((c * 3 + l) % 10), y + 6, 4, 1);
+        }
+      }
+    }
+
     function desenharVic(v, camX) {
       if (v.invencivel > 0 && Math.floor(v.invencivel * 10) % 2 === 0) return;
       const S = J.sprites.vic;
@@ -1212,12 +1455,16 @@
     function desenharOnca(o, camX) {
       if (o.estado === 'foi') return;
       if (o.invencivel > 0 && Math.floor(o.invencivel * 12) % 2 === 0) return;
-      const S = J.sprites.onca;
-      const sp = o.estado === 'fugindo' ? S.fugindo : S.andando[Math.floor(o.animTempo * 6) % 2];
-      J.desenharSprite(g, sp, o.x - camX, o.y, { espelhar: o.vx < 0, escala: o.chefona ? 2 : 1 });
-      if (o.estado === 'fugindo') { // gotinhas de susto
-        g.fillStyle = '#bfe6ff';
+      const S = o.voa ? J.sprites.drone : J.sprites.onca;
+      const sp = o.estado === 'fugindo' ? S.fugindo : S.andando[Math.floor(o.animTempo * (o.voa ? 20 : 6)) % 2];
+      const esc = o.chefona ? 2 : 1;
+      // o drone flutua um pouquinho acima do chão
+      const flutua = o.voa && o.estado === 'andando' ? (-2 + Math.round(Math.sin(o.animTempo * 5))) * esc : 0;
+      J.desenharSprite(g, sp, o.x - camX, o.y + flutua, { espelhar: o.vx < 0, escala: esc });
+      if (o.estado === 'fugindo') { // gotinhas de susto (onça) ou faíscas (drone)
+        g.fillStyle = o.voa ? '#ffd84d' : '#bfe6ff';
         g.fillRect(o.x - camX + (o.vx > 0 ? -3 : o.w + 2), o.y - 2, 2, 2);
+        if (o.voa) g.fillRect(o.x - camX + o.w / 2, o.y + o.h + 2, 2, 2);
       }
     }
 
@@ -1228,14 +1475,19 @@
     function cenaJogo(jogo) {
       const v = jogo.vic, f = jogo.fase, T = J.TILE, t = jogo.tempo;
       const camX = Math.round(Math.max(0, Math.min(v.x + v.w / 2 - LARG / 2, f.colunas * T - LARG)));
-      const cen = CENARIOS[J.secaoEm(camX + LARG / 2)];
-      fundo(cen, camX);
-      if (f.fim) g.drawImage(estufa, Math.round(f.fim.x + 24 - 30 - camX), f.fim.y + f.fim.h - 47);
+      const cen = CENARIOS[J.secaoEm(camX + LARG / 2, f.secoes)];
+      const noite = jogo.faseId === 'noite';
+      fundo(cen, camX, t);
+      if (f.fim) g.drawImage(noite ? palco : estufa, Math.round(f.fim.x + 24 - 30 - camX), f.fim.y + f.fim.h - 47);
       tiles(jogo, camX, t);
-      for (const b of f.bandeiras) J.desenharSprite(g, b.ativa ? J.sprites.bandeira.erguida : J.sprites.bandeira.abaixada, b.x + 4 - camX, b.y);
+      const B = noite ? J.sprites.bandeiraRoxa : J.sprites.bandeira;
+      for (const b of f.bandeiras) J.desenharSprite(g, b.ativa ? B.erguida : B.abaixada, b.x + 4 - camX, b.y);
+      const item1 = noite ? J.sprites.lightstick : J.sprites.acai;
+      const item2 = noite ? J.sprites.ingresso : J.sprites.fruta;
       for (const k of f.coletaveis) {
         if (k.pego || k.x < camX - 16 || k.x > camX + LARG + 16) continue;
-        J.desenharSprite(g, k.tipo === 'acai' ? J.sprites.acai : J.sprites.fruta, k.x + 2 - camX, k.y + 2 + Math.round(Math.sin(t * 3 + k.x) * 1));
+        const sp = k.tipo === 'acai' ? item1 : item2;
+        J.desenharSprite(g, sp, k.x + 2 - camX, k.y + 2 + Math.round(Math.sin(t * 3 + k.x) * 1) - (sp.linhas.length > 6 ? 2 : 0));
       }
       for (const o of jogo.oncas) desenharOnca(o, camX);
       for (let i = jogo.gatos.length - 1; i >= 0; i--) desenharGato(jogo.gatos[i], camX, t);
@@ -1284,7 +1536,7 @@
       g.fillStyle = '#00000066'; g.fillRect(0, 10, LARG, 74);
       blit();
       texto('Vic, Roquinho e Alya', 160, 16, { tam: 20, cor: '#f2d36b', alinhar: 'center' });
-      texto('Uma aventura pela Amazônia', 160, 42, { tam: 10, alinhar: 'center' });
+      texto('Uma aventura em duas fases', 160, 42, { tam: 10, alinhar: 'center' });
       const toque = J.modoToque;
       if (Math.floor(performance.now() / 500) % 2 === 0) texto(toque ? 'Toque na tela para começar' : 'Aperte uma setinha para começar', 160, 58, { tam: 9, cor: '#bff5c9', alinhar: 'center' });
       texto(toque ? '◀ ▶ andar        ▲ pular' : '← → andar    ↑ pular    M som', 160, 72, { tam: 7, cor: '#e8e8e8', alinhar: 'center' });
@@ -1293,7 +1545,85 @@
       texto('Vic', 198, 166, { tam: 7, alinhar: 'center' });
     }
 
+    // ---------- escolha de fase ----------
+    function miniAmazonia(x, y, w, h, t) {
+      CENARIOS.mata.ceu.forEach((cor, i) => { g.fillStyle = cor; g.fillRect(x, y + i * 8, w, 8); });
+      g.fillStyle = '#88cfa4'; g.fillRect(x, y + 32, w, h - 32);
+      bolinha(g, x + 24, y + 34, 14, '#3d8a58'); bolinha(g, x + w - 26, y + 30, 16, '#3d8a58');
+      g.fillStyle = '#5a3d24'; g.fillRect(x + 22, y + 44, 5, h - 62); g.fillRect(x + w - 28, y + 42, 5, h - 60);
+      g.fillStyle = '#7a5532'; g.fillRect(x, y + h - 18, w, 18);
+      g.fillStyle = '#4caf50'; g.fillRect(x, y + h - 18, w, 3);
+      J.desenharSprite(g, J.sprites.onca.andando[Math.floor(t * 6) % 2], x + w - 50, y + h - 34);
+      J.desenharSprite(g, J.sprites.acai, x + 40, y + h - 32 + Math.round(Math.sin(t * 3)));
+      J.desenharSprite(g, J.sprites.vic.parado, x + 14, y + h - 38);
+    }
+    function miniNoite(x, y, w, h, t) {
+      CENARIOS.entrada.ceu.forEach((cor, i) => { g.fillStyle = cor; g.fillRect(x, y + i * 8, w, 8); });
+      g.fillStyle = '#281742'; g.fillRect(x, y + 32, w, h - 32);
+      const desvio = Math.sin(t) * 20;
+      g.fillStyle = 'rgba(255,243,196,0.12)';
+      g.beginPath(); g.moveTo(x + 30, y + 2); g.lineTo(x + 34, y + 2); g.lineTo(x + 52 + desvio, y + h - 18); g.lineTo(x + 12 + desvio, y + h - 18); g.closePath(); g.fill();
+      for (let i = 0; i < 9; i++) {
+        const px = x + 6 + i * 14, py = y + h - 34;
+        bolinha(g, px, py, 4, '#1a1028'); g.fillStyle = '#1a1028'; g.fillRect(px - 5, py + 3, 11, 13);
+        if (i % 2 === 0) { g.fillStyle = Math.floor(t * 2 + i) % 2 ? '#e3c6ff' : '#b56cff'; g.fillRect(px + 4, py - 12 - (Math.floor(t * 3 + i) % 2), 3, 3); }
+      }
+      g.fillStyle = '#2a2340'; g.fillRect(x, y + h - 18, w, 18);
+      g.fillStyle = '#b56cff'; g.fillRect(x, y + h - 18, w, 2);
+      J.desenharSprite(g, J.sprites.drone.andando[Math.floor(t * 20) % 2], x + w - 50, y + 34 + Math.round(Math.sin(t * 5)), { espelhar: true });
+      J.desenharSprite(g, J.sprites.lightstick, x + 40, y + h - 34 + Math.round(Math.sin(t * 3)));
+      J.desenharSprite(g, J.sprites.vic.parado, x + 14, y + h - 38);
+    }
+
+    function telaEscolha(jogo) {
+      const t = performance.now() / 1000;
+      g.fillStyle = '#0d1a12'; g.fillRect(0, 0, LARG, ALT);
+      const nomesFases = J.ORDEM_FASES.map((id) => J.FASES[id].nome);
+      J.CARTOES.forEach((c, i) => {
+        const sel = jogo.escolha === i;
+        g.fillStyle = sel ? '#ffe07a' : '#3a4a3e'; g.fillRect(c.x - 2, c.y - 2, c.w + 4, c.h + 4);
+        (i === 0 ? miniAmazonia : miniNoite)(c.x, c.y, c.w, c.h, t);
+        g.fillStyle = '#000000aa'; g.fillRect(c.x, c.y, c.w, 26);
+        if (!sel) { g.fillStyle = '#00000055'; g.fillRect(c.x, c.y, c.w, c.h); }
+        if (sel) { // setinha pulando em cima do cartão escolhido
+          const p = Math.round(Math.abs(Math.sin(t * 4)) * 3);
+          g.fillStyle = '#ffe07a';
+          for (let k = 0; k < 4; k++) g.fillRect(c.x + c.w / 2 - 3 + k, c.y - 10 - p + k, 7 - 2 * k, 1);
+        }
+      });
+      blit();
+      texto('Escolha a fase', 160, 8, { tam: 12, cor: '#f2d36b', alinhar: 'center' });
+      J.CARTOES.forEach((c, i) => {
+        texto(`Fase ${i + 1}`, c.x + c.w / 2, c.y + 3, { tam: 7, cor: '#e8e8e8', alinhar: 'center' });
+        texto(nomesFases[i], c.x + c.w / 2, c.y + 12, { tam: 10, cor: jogo.escolha === i ? '#ffe07a' : '#ffffff', alinhar: 'center' });
+      });
+      texto(J.modoToque ? 'Toque numa fase para jogar' : '← → escolher      ↑ jogar', 160, 166, { tam: 8, cor: '#bff5c9', alinhar: 'center' });
+    }
+
+    function telaFinalNoite(jogo) {
+      const t = performance.now() / 1000;
+      fundoNoite(CENARIOS.palco, t * 30, t);
+      g.drawImage(palco, 0, 0, 61, 47, 99, 54, 122, 94);
+      g.fillStyle = '#2a2340'; g.fillRect(0, 148, LARG, 44);
+      g.fillStyle = '#b56cff'; g.fillRect(0, 148, LARG, 2);
+      for (let i = 0; i < 14; i++) { // confete
+        const cx = (i * 47 + t * 20 * (1 + (i % 3))) % LARG, cy = (i * 31 + t * 40 * (1 + (i % 2))) % 140;
+        g.fillStyle = LUZES[i % 4]; g.fillRect(Math.round(cx), Math.round(cy) + 50, 2, 2);
+      }
+      J.desenharSprite(g, J.sprites.roquinho.parado, 126, 165);
+      J.desenharSprite(g, J.sprites.vic.parado, 154, 152);
+      J.desenharSprite(g, J.sprites.alya.parado, 178, 165, { espelhar: true });
+      J.desenharSprite(g, J.sprites.lightstick, 168, 140 - Math.round(Math.abs(Math.sin(t * 4)) * 4));
+      J.desenharSprite(g, J.sprites.coracao.cheio, 146, 140 - Math.abs(Math.sin(t * 3.3)) * 4);
+      g.fillStyle = '#00000059'; g.fillRect(0, 2, LARG, 50);
+      blit();
+      texto('Parabéns, Vic! Você chegou ao palco!', 160, 9, { tam: 10, cor: '#e3c6ff', alinhar: 'center', sombra: '#3a1050' });
+      texto(`Drones espantados: ${jogo.oncasEspantadas}      Lightsticks: ${jogo.frutas}`, 160, 28, { tam: 8, alinhar: 'center' });
+      if (jogo.tempoFinal >= J.ESPERA_FINAL) texto(J.modoToque ? 'Toque na tela para escolher a fase' : 'Aperte ↑ para escolher a fase', 160, 40, { tam: 7, cor: '#e8e8e8', alinhar: 'center' });
+    }
+
     function telaFinal(jogo) {
+      if (jogo.faseId === 'noite') return telaFinalNoite(jogo);
       CENARIOS.jardim.ceu.forEach((cor, i) => { g.fillStyle = cor; g.fillRect(0, i * 12, LARG, 12); });
       g.fillStyle = '#f0bd90'; g.fillRect(0, 48, LARG, 100);
       g.drawImage(estufa, 0, 0, 61, 47, 99, 54, 122, 94);
@@ -1311,7 +1641,7 @@
       blit();
       texto('Parabéns indiazinha de Manaus!!', 160, 8, { tam: 14, cor: '#ffe07a', alinhar: 'center', sombra: '#7a2a1a' });
       texto(`Onças espantadas: ${jogo.oncasEspantadas}      Frutas: ${jogo.frutas}`, 160, 28, { tam: 8, alinhar: 'center' });
-      if (jogo.tempoFinal >= J.ESPERA_FINAL) texto(J.modoToque ? 'Toque na tela para jogar de novo' : 'Aperte ↑ para jogar de novo', 160, 40, { tam: 7, cor: '#e8e8e8', alinhar: 'center' });
+      if (jogo.tempoFinal >= J.ESPERA_FINAL) texto(J.modoToque ? 'Toque na tela para escolher a fase' : 'Aperte ↑ para escolher a fase', 160, 40, { tam: 7, cor: '#e8e8e8', alinhar: 'center' });
     }
 
     function blit() {
@@ -1323,12 +1653,14 @@
       ajustar,
       desenhar(jogo) {
         if (jogo.tela === 'inicio') return telaInicio(jogo);
+        if (jogo.tela === 'escolha') return telaEscolha(jogo);
         if (jogo.tela === 'final') return telaFinal(jogo);
         const camX = cenaJogo(jogo);
         blit();
         nomes(jogo, camX);
-        texto(`Onças espantadas: ${jogo.oncasEspantadas}`, 6, 15, { tam: 7 });
-        texto(`Frutas: ${jogo.frutas}`, 6, 24, { tam: 7, cor: '#ffe9b0' });
+        const noite = jogo.faseId === 'noite';
+        texto(`${noite ? 'Drones espantados' : 'Onças espantadas'}: ${jogo.oncasEspantadas}`, 6, 15, { tam: 7 });
+        texto(`${noite ? 'Lightsticks' : 'Frutas'}: ${jogo.frutas}`, 6, 24, { tam: 7, cor: noite ? '#e3c6ff' : '#ffe9b0' });
       },
     };
   };
@@ -1364,6 +1696,7 @@
     dpad: document.getElementById('dpad'),
     pular: document.getElementById('bt-pular'),
     ignorar: '#topo',
+    tela: canvas,
   });
 
   // Sem zoom por toque duplo ou pinça: o Safari do iPhone ignora o "user-scalable=no",
@@ -1425,13 +1758,13 @@
       while (acumulado >= PASSO && passos < 5) {
         J.atualizarJogo(jogo, e, PASSO);
         if (J.aoEventos) J.aoEventos(jogo, e);
-        e = { ...e, puloApertado: false, qualquerTecla: false, alternarSom: false, toqueTela: false };
+        e = { esquerda: e.esquerda, direita: e.direita }; // o que foi "apertado agora" vale só uma vez
         acumulado -= PASSO;
         passos++;
       }
       if (passos === 5) acumulado = 0;
     }
-    audio.atualizarMusica(jogo.tela);
+    audio.atualizarMusica(jogo.tela, jogo.faseId);
     render.desenhar(jogo);
     requestAnimationFrame(quadro);
   }
