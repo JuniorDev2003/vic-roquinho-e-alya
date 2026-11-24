@@ -270,6 +270,41 @@
   };
   const BANDEIRA_ROXA_PALETA = { ...BANDEIRA_PALETA, F: '#9b4dff', Y: '#ffffff', T: '#e3c6ff' };
 
+  // ---------- Vic com roupa de show (só na Noite roxa) ----------
+  // Corpete vinho sem alça, saia xadrez em camadas (vermelha por cima, bege por baixo),
+  // camisa xadrez amarrada na cintura, meia arrastão e bota preta de cano alto.
+  const VIC_SHOW_PALETA = {
+    ...VIC_PALETA,
+    V: '#7a1f2b', // corpete vinho
+    Q: '#a3243a', // saia xadrez vermelha
+    L: '#e8c9a0', // linhas do xadrez
+    G: '#d9c39a', // camada bege da saia
+    F: '#b8875e', // camisa xadrez amarrada
+    N: '#9a6a58', // meia arrastão
+    B: '#141016', // bota preta
+    W: '#5a5560', // ilhoses da bota
+  };
+  const VIC_SHOW_TRONCO = VIC_TRONCO.slice(0, 9).concat([
+    'KYYYKSSSK...',
+    'KYYKVVVVVK..',
+    '.KYKVVVVSK..',
+    '..KKVVVVSK..',
+    '...KQLQQK...',
+  ]);
+  const BARRA_SAIA = '..KQLQQLQFFK';
+  // Pernas da Vic com a roupa nova: short → camada bege (com a ponta da camisa caindo),
+  // primeira faixa de pele → meia arrastão, a de baixo → cano da bota.
+  function pernasShow(pernas) {
+    let pele = 0;
+    return pernas.slice(1).map((l, i) => {
+      if (i === 0) { const r = l.replace(/D/g, 'G'); return r.slice(0, 10) + (r[10] === '.' ? 'F' : r[10]) + r.slice(11); }
+      if (l.includes('S')) return l.replace(/S/g, pele++ === 0 ? 'N' : 'B');
+      if (l.includes('B')) return l.replace(/BB/, 'BW');
+      return l;
+    });
+  }
+  const vicShow = (pernas) => ({ linhas: VIC_SHOW_TRONCO.concat([BARRA_SAIA], pernasShow(pernas)), paleta: VIC_SHOW_PALETA });
+
   // ---------- Os 7 do show (só na Noite roxa) ----------
   // Bonequinhos originais no estilo do jogo (12x20, como a Vic): cada um com cabelo, penteado
   // e roupa de palco próprios. As pernas reaproveitam as da Vic, com calça comprida.
@@ -343,6 +378,11 @@
     fruta: FRUTA,
     bandeira: { abaixada: BANDEIRA_ABAIXADA, erguida: BANDEIRA_ERGUIDA },
     drone: { andando: [drone(HELICE_A), drone(HELICE_B)], fugindo: drone(HELICE_A) },
+    vicShow: {
+      parado: vicShow(VIC_PARADO),
+      andando: [vicShow(VIC_PASSO), vicShow(VIC_JUNTA)],
+      pulando: vicShow(VIC_PULO),
+    },
     membros: SPRITES_MEMBROS,
     lightstick: LIGHTSTICK,
     ingresso: INGRESSO,
@@ -1502,9 +1542,9 @@
       }
     }
 
-    function desenharVic(v, camX) {
+    function desenharVic(v, camX, show = false) {
       if (v.invencivel > 0 && Math.floor(v.invencivel * 10) % 2 === 0) return;
-      const S = J.sprites.vic;
+      const S = show ? J.sprites.vicShow : J.sprites.vic; // roupa de show na Noite roxa
       const sp = !v.noChao ? S.pulando : v.vx !== 0 ? S.andando[Math.floor(v.animTempo * 8) % 2] : S.parado;
       J.desenharSprite(g, sp, v.x - 1 - camX, v.y, { espelhar: !v.olhandoDireita });
     }
@@ -1554,7 +1594,7 @@
       }
       for (const o of jogo.oncas) desenharOnca(o, camX);
       for (let i = jogo.gatos.length - 1; i >= 0; i--) desenharGato(jogo.gatos[i], camX, t);
-      desenharVic(v, camX);
+      desenharVic(v, camX, noite);
       coracoes(v);
       return camX;
     }
@@ -1635,7 +1675,7 @@
       g.fillStyle = '#b56cff'; g.fillRect(x, y + h - 18, w, 2);
       J.desenharSprite(g, J.sprites.drone.andando[Math.floor(t * 20) % 2], x + w - 50, y + 34 + Math.round(Math.sin(t * 5)), { espelhar: true });
       J.desenharSprite(g, J.sprites.lightstick, x + 40, y + h - 34 + Math.round(Math.sin(t * 3)));
-      J.desenharSprite(g, J.sprites.vic.parado, x + 14, y + h - 38);
+      J.desenharSprite(g, J.sprites.vicShow.parado, x + 14, y + h - 38);
     }
 
     function telaEscolha(jogo) {
@@ -1681,7 +1721,7 @@
         J.desenharSprite(g, Math.floor(t * 4 + i) % 3 === 0 ? S.andando[0] : S.parado, x, 104 - pulo, { espelhar: i >= 4 });
         return { nome, cx: x + 6, y: i % 2 ? 90 : 84 };
       });
-      J.desenharSprite(g, J.sprites.vic.parado, 154, 156);
+      J.desenharSprite(g, J.sprites.vicShow.parado, 154, 156);
       J.desenharSprite(g, J.sprites.lightstick, 168, 146 - Math.round(Math.abs(Math.sin(t * 4)) * 4));
       J.desenharSprite(g, J.sprites.coracao.cheio, 144, 146 - Math.abs(Math.sin(t * 3.3)) * 4);
       g.fillStyle = '#00000059'; g.fillRect(0, 2, LARG, 50);
